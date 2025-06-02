@@ -14,31 +14,53 @@ const generateConversationTitle = (message) => {
     .replace(/\?/g, '')
     .trim();
 
-  // Take first 40 characters and add ellipsis if needed
+  // Take first 50 characters and add ellipsis if needed
   let title = cleanMessage.charAt(0).toUpperCase() + cleanMessage.slice(1);
-  if (title.length > 40) {
-    title = title.substring(0, 40) + '...';
+  if (title.length > 50) {
+    title = title.substring(0, 50) + '...';
   }
 
   // If title is too short or empty, use topic-based names
-  if (title.length < 10) {
+  if (title.length < 15) {
     const topics = {
       'revenue': 'Revenue Analysis',
+      'revenu': 'Revenue Analysis',
       'sales': 'Sales Performance',
+      'ventes': 'Sales Performance',
       'profit': 'Profit Analysis',
       'margin': 'Margin Analysis',
+      'marge': 'Margin Analysis',
       'budget': 'Budget Review',
       'cost': 'Cost Analysis',
+      'coût': 'Cost Analysis',
       'expense': 'Expense Review',
       'performance': 'Performance Metrics',
       'kpi': 'KPI Dashboard',
       'financial': 'Financial Overview',
+      'financier': 'Financial Overview',
       'docaposte': 'Docaposte Analysis',
       'trend': 'Trend Analysis',
+      'tendance': 'Trend Analysis',
       'comparison': 'Comparative Analysis',
+      'comparaison': 'Comparative Analysis',
       'quarterly': 'Quarterly Report',
+      'q1': 'Q1 Analysis',
+      'q2': 'Q2 Analysis',
+      'q3': 'Q3 Analysis',
+      'q4': 'Q4 Analysis',
+      'trimestre': 'Quarterly Analysis',
       'monthly': 'Monthly Report',
-      'yearly': 'Annual Report'
+      'mensuel': 'Monthly Report',
+      'yearly': 'Annual Report',
+      'annuel': 'Annual Report',
+      '2024': '2024 Analysis',
+      '2023': '2023 Analysis',
+      '2022': 'Historical Analysis',
+      'hcs': 'HCS Analysis',
+      'manufacture': 'Manufacture Analysis',
+      'client': 'Client Analysis',
+      'product': 'Product Analysis',
+      'produit': 'Product Analysis'
     };
 
     const originalMessage = message.toLowerCase();
@@ -46,6 +68,16 @@ const generateConversationTitle = (message) => {
       if (originalMessage.includes(keyword)) {
         return topicTitle;
       }
+    }
+
+    // Extract meaningful parts from the message
+    const words = message.split(' ').filter(word =>
+      word.length > 3 &&
+      !['show', 'give', 'tell', 'what', 'how', 'when', 'where', 'why', 'the', 'and', 'for', 'with'].includes(word.toLowerCase())
+    );
+
+    if (words.length >= 2) {
+      return words.slice(0, 3).join(' ');
     }
 
     // Fallback to date-based naming
@@ -64,6 +96,7 @@ export const ChatProvider = ({ children }) => {
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [ws, setWs] = useState(null);
+  const [hasAutoCreatedConversation, setHasAutoCreatedConversation] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -78,6 +111,15 @@ export const ChatProvider = ({ children }) => {
       }
     };
   }, [user]);
+
+  // Auto-create conversation only when needed
+  useEffect(() => {
+    if (user && conversations.length === 0 && !hasAutoCreatedConversation && !currentConversation) {
+      // Only create if there are no conversations at all
+      setHasAutoCreatedConversation(true);
+      // Don't auto-create, wait for user to start chatting
+    }
+  }, [user, conversations, hasAutoCreatedConversation, currentConversation]);
 
   const connectWebSocket = () => {
     if (!user) return;
@@ -99,6 +141,9 @@ export const ChatProvider = ({ children }) => {
           const newTitle = generateConversationTitle(user_message.content);
           updateConversationTitle(conversation_id, newTitle);
         }
+
+        // Refresh conversations list to update the "updated_at" timestamp
+        loadConversations();
       } else if (data.type === 'error') {
         setIsTyping(false);
         console.error('Chat error:', data.error);
@@ -121,6 +166,12 @@ export const ChatProvider = ({ children }) => {
     try {
       const convs = await chatService.getConversations();
       setConversations(convs);
+
+      // If we have a current conversation but it's not in the list, clear it
+      if (currentConversation && !convs.find(c => c.id === currentConversation.id)) {
+        setCurrentConversation(null);
+        setMessages([]);
+      }
     } catch (error) {
       console.error('Failed to load conversations:', error);
     }
@@ -166,18 +217,28 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
-  const sendMessage = (message) => {
+  const sendMessage = async (message) => {
     if (!ws || !message.trim()) return;
 
+    // Create a new conversation if there isn't one
+    let conversation = currentConversation;
+    if (!conversation) {
+      conversation = await createNewConversation();
+      if (!conversation) {
+        console.error('Failed to create conversation');
+        return;
+      }
+    }
+
     // If this is the first message and conversation title is still default, generate a title
-    if (currentConversation && currentConversation.title === 'New Conversation' && messages.length === 0) {
+    if (conversation && conversation.title === 'New Conversation' && messages.length === 0) {
       const newTitle = generateConversationTitle(message);
-      updateConversationTitle(currentConversation.id, newTitle);
+      updateConversationTitle(conversation.id, newTitle);
     }
 
     const messageData = {
       message: message.trim(),
-      conversation_id: currentConversation?.id
+      conversation_id: conversation.id
     };
 
     ws.send(JSON.stringify(messageData));

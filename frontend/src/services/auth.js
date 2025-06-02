@@ -23,4 +23,14 @@ export const authService = {
     const response = await api.get('/api/auth/me');
     return response.data;
   },
+
+  async updateProfile(profileData) {
+    const response = await api.put('/api/auth/profile', profileData);
+    return response.data;
+  },
+
+  async changePassword(passwordData) {
+    const response = await api.put('/api/auth/change-password', passwordData);
+    return response.data;
+  },
 };

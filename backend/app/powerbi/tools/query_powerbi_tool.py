@@ -1,5 +1,5 @@
 """
-Enhanced tool for executing DAX queries against PowerBI with improved error handling and query optimization.
+Enhanced tool for executing DAX queries against PowerBI with improved error handling and Euro formatting.
 """
 
 import re
@@ -30,13 +30,209 @@ For simple calculations, use ROW() to wrap CALCULATE().
 Always use predefined measures like [CA], [MB], [BUDGET] instead of raw table calculations."""
     args_schema: Type[BaseModel] = QueryPowerBIToolInput
 
-    # Declare pbi_helper as a field - this is the key fix!
+    # Declare pbi_helper as a field
     pbi_helper: Any = Field(default=None, exclude=True)
 
     def __init__(self):
         """Initialize the query tool with PowerBI helper."""
         super().__init__()
         self.pbi_helper = PowerBIHelper(settings.DATASET_ID)
+
+    def _format_financial_value(self, value, is_percentage=False):
+        """Format financial values with proper Euro symbol and percentage handling."""
+        if value is None:
+            return "N/A"
+
+        try:
+            # Convert to float if it's a string
+            if isinstance(value, str):
+                # Remove any existing formatting
+                clean_value = value.replace(',', '').replace('€', '').replace('%', '').strip()
+                if clean_value == '' or clean_value.lower() in ['null', 'none', 'n/a']:
+                    return "N/A"
+                value = float(clean_value)
+
+            # Handle percentage values
+            if is_percentage:
+                return f"{value:.1f}%"
+
+            # Format financial values with Euro symbol
+            if abs(value) >= 1_000_000:
+                # Millions: €10.92M
+                return f"€{value/1_000_000:.2f}M"
+            elif abs(value) >= 1_000:
+                # Thousands: €1,234.56
+                return f"€{value:,.2f}"
+            elif abs(value) >= 100:
+                # Hundreds: €123.45
+                return f"€{value:.2f}"
+            elif abs(value) >= 1:
+                # Units: €1.23
+                return f"€{value:.2f}"
+            else:
+                # Less than 1 euro: €0.12
+                return f"€{value:.2f}"
+
+        except (ValueError, TypeError):
+            return str(value)
+
+    def _detect_financial_columns(self, columns):
+        """Detect which columns contain financial data that should be formatted with Euro."""
+        financial_keywords = [
+            'revenue', 'revenu', 'ca', 'chiffre', 'affaires',
+            'margin', 'marge', 'mb', 'gross', 'brute',
+            'budget', 'actual', 'réel', 'reel',
+            'cost', 'coût', 'cout', 'charge', 'expense',
+            'profit', 'bénéfice', 'benefice', 'résultat', 'resultat', 'rex',
+            'montant', 'amount', 'value', 'valeur',
+            'total', 'sum', 'somme',
+            'difference', 'différence', 'variance', 'écart', 'ecart',
+            'price', 'prix', 'tarif'
+        ]
+
+        percentage_keywords = [
+            'percentage', 'pourcentage', 'percent', 'pct', '%',
+            'rate', 'taux', 'ratio', 'change', 'growth', 'croissance',
+            'variation', 'evolution', 'évolution'
+        ]
+
+        financial_columns = []
+        percentage_columns = []
+
+        for col in columns:
+            col_lower = col.lower()
+
+            # Check for percentage indicators first (more specific)
+            if (any(keyword in col_lower for keyword in percentage_keywords) or
+                col_lower.endswith('(%)') or
+                col_lower.endswith('%') or
+                'change' in col_lower or
+                'growth' in col_lower or
+                'croissance' in col_lower):
+                percentage_columns.append(col)
+            # Check for financial indicators
+            elif any(keyword in col_lower for keyword in financial_keywords):
+                financial_columns.append(col)
+
+        return financial_columns, percentage_columns
+
+    def _format_time_series(self, results: List[Dict[str, Any]]) -> str:
+        """Format time series data with proper Euro formatting."""
+        formatted_output = "Time Series Results:\n\n"
+
+        # Identify date/time column and financial columns
+        time_cols = []
+        all_columns = list(results[0].keys())
+
+        for col in all_columns:
+            col_lower = col.lower()
+            if any(term in col_lower for term in ["mois", "date", "month", "year", "année", "trimestre", "semestre", "jour", "day"]):
+                time_cols.append(col)
+
+        time_col = time_cols[0] if time_cols else all_columns[0]
+
+        # Detect financial and percentage columns
+        data_columns = [col for col in all_columns if col != time_col]
+        financial_columns, percentage_columns = self._detect_financial_columns(data_columns)
+
+        # Format as bullet points by time period
+        for row in results:
+            time_value = row[time_col]
+            formatted_output += f"• {time_value}:\n"
+
+            for col in data_columns:
+                val = row.get(col)
+                if col in percentage_columns:
+                    formatted_value = self._format_financial_value(val, is_percentage=True)
+                elif col in financial_columns:
+                    formatted_value = self._format_financial_value(val, is_percentage=False)
+                else:
+                    # Non-financial data
+                    if isinstance(val, (int, float)):
+                        formatted_value = f"{val:,.2f}"
+                    else:
+                        formatted_value = str(val)
+
+                formatted_output += f"  - {col}: {formatted_value}\n"
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _format_table(self, results: List[Dict[str, Any]]) -> str:
+        """Format general table data with Euro formatting."""
+        formatted_output = "Query Results:\n\n"
+
+        # Get all column names
+        columns = list(results[0].keys())
+
+        # Detect financial and percentage columns
+        financial_columns, percentage_columns = self._detect_financial_columns(columns)
+
+        # Format as bullet points
+        for i, row in enumerate(results):
+            formatted_output += f"• Row {i+1}:\n"
+            for col in columns:
+                value = row.get(col, "N/A")
+
+                if col in percentage_columns:
+                    formatted_value = self._format_financial_value(value, is_percentage=True)
+                elif col in financial_columns:
+                    formatted_value = self._format_financial_value(value, is_percentage=False)
+                else:
+                    # Non-financial data
+                    if isinstance(value, (int, float)):
+                        formatted_value = f"{value:,.2f}"
+                    else:
+                        formatted_value = str(value)
+
+                formatted_output += f"  - {col}: {formatted_value}\n"
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _format_results(self, result: Dict[str, Any]) -> str:
+        """Format query results with proper financial formatting and Euro symbols."""
+        if isinstance(result, dict):
+            if "error" in result:
+                return f"Error executing query: {result['error']}"
+
+            if "results" in result and len(result["results"]) > 0:
+                results = result["results"]
+
+                # Case 1: Single value result (scalar)
+                if len(results) == 1 and len(results[0]) == 1:
+                    key = list(results[0].keys())[0]
+                    value = results[0][key]
+
+                    # Detect if it's a financial or percentage value
+                    key_lower = key.lower()
+                    is_percentage = (any(keyword in key_lower for keyword in ['percentage', 'pourcentage', 'percent', 'pct', '%', 'change', 'growth', 'croissance']) or
+                                   key_lower.endswith('(%)') or key_lower.endswith('%'))
+                    is_financial = any(keyword in key_lower for keyword in ['revenue', 'revenu', 'ca', 'margin', 'marge', 'budget', 'cost', 'coût', 'montant', 'total'])
+
+                    if is_percentage:
+                        formatted_value = self._format_financial_value(value, is_percentage=True)
+                    elif is_financial:
+                        formatted_value = self._format_financial_value(value, is_percentage=False)
+                    else:
+                        # For unknown types, assume financial if it's a number
+                        formatted_value = self._format_financial_value(value, is_percentage=False) if isinstance(value, (int, float)) else str(value)
+
+                    return f"{key}: {formatted_value}"
+
+                # Case 2: Time series data
+                if len(results) > 1 and any(
+                    any(term in col.lower() for term in ["mois", "date", "month", "year", "année"])
+                    for col in results[0].keys()
+                ):
+                    return self._format_time_series(results)
+
+                # Case 3: General table data
+                return self._format_table(results)
+
+            return "Query returned no results."
+
+        return f"Query results:\n\n{str(result)}"
 
     def _clean_query(self, query: str) -> str:
         """Clean and prepare query string for execution."""
@@ -143,89 +339,6 @@ Always use predefined measures like [CA], [MB], [BUDGET] instead of raw table ca
             return fixed_query
 
         return query
-
-    def _format_time_series(self, results: List[Dict[str, Any]]) -> str:
-        """Format time series data nicely."""
-        formatted_output = "Time Series Results:\n\n"
-
-        # Identify date/time column and measure columns
-        time_cols = []
-        for col in results[0].keys():
-            col_lower = col.lower()
-            if any(term in col_lower for term in ["mois", "date", "month", "year", "année", "trimestre", "semestre", "jour", "day"]):
-                time_cols.append(col)
-
-        time_col = time_cols[0] if time_cols else list(results[0].keys())[0]
-
-        # Format as bullet points by time period
-        for row in results:
-            time_value = row[time_col]
-            formatted_output += f"• {time_value}:\n"
-
-            for col, val in row.items():
-                if col != time_col:
-                    if isinstance(val, (int, float)):
-                        formatted_value = f"{val:,.2f}"
-                    else:
-                        formatted_value = str(val)
-                    formatted_output += f"  - {col}: {formatted_value}\n"
-            formatted_output += "\n"
-
-        return formatted_output
-
-    def _format_table(self, results: List[Dict[str, Any]]) -> str:
-        """Format general table data."""
-        formatted_output = "Query Results:\n\n"
-
-        # Get all column names
-        columns = list(results[0].keys())
-
-        # Format as bullet points
-        for i, row in enumerate(results):
-            formatted_output += f"• Row {i+1}:\n"
-            for col in columns:
-                value = row.get(col, "N/A")
-                if isinstance(value, (int, float)):
-                    formatted_value = f"{value:,.2f}"
-                else:
-                    formatted_value = str(value)
-                formatted_output += f"  - {col}: {formatted_value}\n"
-            formatted_output += "\n"
-
-        return formatted_output
-
-    def _format_results(self, result: Dict[str, Any]) -> str:
-        """Format query results in a more readable way."""
-        if isinstance(result, dict):
-            if "error" in result:
-                return f"Error executing query: {result['error']}"
-
-            if "results" in result and len(result["results"]) > 0:
-                results = result["results"]
-
-                # Case 1: Single value result (scalar)
-                if len(results) == 1 and len(results[0]) == 1:
-                    key = list(results[0].keys())[0]
-                    value = results[0][key]
-
-                    if isinstance(value, (int, float)):
-                        return f"{key}: {value:,.2f}"
-                    else:
-                        return f"{key}: {value}"
-
-                # Case 2: Time series data
-                if len(results) > 1 and any(
-                    any(term in col.lower() for term in ["mois", "date", "month", "year", "année"])
-                    for col in results[0].keys()
-                ):
-                    return self._format_time_series(results)
-
-                # Case 3: General table data
-                return self._format_table(results)
-
-            return "Query returned no results."
-
-        return f"Query results:\n\n{str(result)}"
 
     def _run(self, query: str) -> str:
         """Execute a DAX query against PowerBI dataset with automatic correction."""

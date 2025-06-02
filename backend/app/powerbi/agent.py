@@ -128,41 +128,108 @@ class PowerBIAgentService:
         """
 
         TABLE_COLUMN_GUIDANCE = """
-        KEY TABLE-COLUMN MAPPINGS TO REMEMBER:
+                KEY TABLE-COLUMN MAPPINGS TO REMEMBER:
 
-        1. Always filter Business Units (BU) using GL table:
-           - Correct: GL[BU] = "HCS"
-           - Incorrect: DIM_SOCIETE[BU] = "HCS" (BU column doesn't exist in DIM_SOCIETE)
+                1. CRITICAL BU vs SOUS BU INTELLIGENCE:
+                   Users often confuse Business Units (BU) with Sub-Business Units (Sous BU). 
 
-        2. Always filter Sub-Business Units using GL table:
-           - Correct: GL[Sous BU] = "Digital Solutions"
-           - Incorrect: DIM_SOCIETE[Sous BU] = "Digital Solutions"
+                   SMART QUERY STRATEGY:
+                   - When a user asks about a "business unit" or mentions a specific unit name, FIRST try GL[BU]
+                   - If the query returns NO RESULTS or EMPTY data, IMMEDIATELY try the same query with GL[Sous BU]
+                   - Common user confusion examples:
+                     * User says "HCS business unit" → Could be GL[BU] = "HCS" OR GL[Sous BU] = "HCS"
+                     * User says "Digital Solutions unit" → Could be GL[BU] = "Digital Solutions" OR GL[Sous BU] = "Digital Solutions"
+                     * User says "Manufacture department" → Could be GL[BU] = "Manufacture" OR GL[Sous BU] = "Manufacture"
 
-        3. Always use DIM_DATE for time-based filtering:
-           - For years: DIM_DATE[Année] = 2024
-           - For quarters: DIM_DATE[TRIMESTRE] = 3 
-           - For months: DIM_DATE[MOIS] = 9
-           - Always filter by numerical values, not text
+                   IMPLEMENTATION PATTERN:
+                   If first query with GL[BU] = "UnitName" returns empty results:
+                   ```
+                   -- First attempt
+                   CALCULATE([CA], GL[BU] = "UnitName", ...)
 
-        4. Always filter clients using DIM_CLIENT:
-           - Correct: DIM_CLIENT[CLIENT_NOM] = "Acme Corp"
-           - Link with GL: Through GL[Client] = DIM_CLIENT[CLIENT_ID]
+                   -- If empty, immediately try
+                   CALCULATE([CA], GL[Sous BU] = "UnitName", ...)
+                   ```
 
-        5. Always filter products using MAPPING_PRODUIT:
-           - Correct: MAPPING_PRODUIT[Produit] = "Product Name" or MAPPING_PRODUIT[Code Produit] = "P123"
-           - Link with GL: Through GL[PRODUIT] = MAPPING_PRODUIT[Code Produit]
+                   Always inform the user which level (BU or Sous BU) returned the data.
 
-        6. Avoid using CALCULATE with FILTER within SUMMARIZECOLUMNS:
-           - Prefer: SUMMARIZECOLUMNS(table[column], "Measure", CALCULATE([Measure], conditions...))
-           - Instead of: SUMMARIZECOLUMNS(FILTER(table, conditions...), "Measure", [Measure])
+                2. Always filter Business Units using GL table:
+                   - For main BU: GL[BU] = "HCS"
+                   - For sub-BU: GL[Sous BU] = "Digital Solutions"
+                   - NEVER use: DIM_SOCIETE[BU] (column doesn't exist)
 
-        7. For date hierarchies, remember these columns exist:
-           - DIM_DATE[Année]: Year number
-           - DIM_DATE[TRIMESTRE]: Quarter number (1-4)
-           - DIM_DATE[MOIS]: Month number (1-12)
-           - DIM_DATE[MOIS_NOM]: Month name
-           - DIM_DATE[SEMESTRE]: Semester (1-2)
-        """
+                3. Always filter Sub-Business Units using GL table:
+                   - Correct: GL[Sous BU] = "Digital Solutions"
+                   - Incorrect: DIM_SOCIETE[Sous BU] = "Digital Solutions"
+
+                4. Always use DIM_DATE for time-based filtering:
+                   - For years: DIM_DATE[Année] = 2024
+                   - For quarters: DIM_DATE[TRIMESTRE] = 3 
+                   - For months: DIM_DATE[MOIS] = 9
+                   - Always filter by numerical values, not text
+
+                5. Always filter clients using DIM_CLIENT:
+                   - Correct: DIM_CLIENT[CLIENT_NOM] = "Acme Corp"
+                   - Link with GL: Through GL[Client] = DIM_CLIENT[CLIENT_ID]
+
+                6. Always filter products using MAPPING_PRODUIT:
+                   - Correct: MAPPING_PRODUIT[Produit] = "Product Name" or MAPPING_PRODUIT[Code Produit] = "P123"
+                   - Link with GL: Through GL[PRODUIT] = MAPPING_PRODUIT[Code Produit]
+
+                7. Avoid using CALCULATE with FILTER within SUMMARIZECOLUMNS:
+                   - Prefer: SUMMARIZECOLUMNS(table[column], "Measure", CALCULATE([Measure], conditions...))
+                   - Instead of: SUMMARIZECOLUMNS(FILTER(table, conditions...), "Measure", [Measure])
+
+                8. For date hierarchies, remember these columns exist:
+                   - DIM_DATE[Année]: Year number
+                   - DIM_DATE[TRIMESTRE]: Quarter number (1-4)
+                   - DIM_DATE[MOIS]: Month number (1-12)
+                   - DIM_DATE[MOIS_NOM]: Month name
+                   - DIM_DATE[SEMESTRE]: Semester (1-2)
+
+                EXAMPLE OF SMART BU/SOUS BU QUERY HANDLING:
+
+                User asks: "What's the revenue for HCS in 2024?"
+
+                Step 1 - Try BU first:
+                ```
+                EVALUATE
+                ROW(
+                    "Revenue HCS (BU Level)", CALCULATE(
+                        [CA],
+                        GL[BU] = "HCS",
+                        DIM_DATE[Année] = 2024
+                    )
+                )
+                ```
+
+                Step 2 - If result is blank/zero, try Sous BU:
+                ```
+                EVALUATE
+                ROW(
+                    "Revenue HCS (Sous BU Level)", CALCULATE(
+                        [CA],
+                        GL[Sous BU] = "HCS",
+                        DIM_DATE[Année] = 2024
+                    )
+                )
+                ```
+
+                Step 3 - If both work, provide both results and explain the difference:
+                ```
+                EVALUATE
+                UNION(
+                    ROW(
+                        "Level", "Business Unit (BU)",
+                        "Revenue", CALCULATE([CA], GL[BU] = "HCS", DIM_DATE[Année] = 2024)
+                    ),
+                    ROW(
+                        "Level", "Sub Business Unit (Sous BU)",
+                        "Revenue", CALCULATE([CA], GL[Sous BU] = "HCS", DIM_DATE[Année] = 2024)
+                    )
+                )
+                ```
+                """
 
         IMPROVED_PATTERNS = """
         IMPROVED DAX QUERY PATTERNS FOR COMMON QUESTIONS:

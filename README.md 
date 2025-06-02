@@ -1,0 +1,150 @@
+# PowerBI Agent Web Application
+
+A modern web application that provides a natural language interface to PowerBI datasets using LangChain and FastAPI.
+
+## Features
+
+- **ChatGPT-like Interface**: Modern, responsive chat interface built with React
+- **Authentication**: Secure user registration and login system
+- **Chat History**: Persistent conversation history for each user
+- **Real-time Communication**: WebSocket-based real-time messaging
+- **PowerBI Integration**: Natural language queries to PowerBI datasets
+- **Docker Support**: Easy deployment with Docker containers
+
+## Quick Start
+
+### Prerequisites
+
+- Docker and Docker Compose
+- PowerBI dataset access
+- OpenAI API key (or custom LLM endpoint)
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd powerbi-agent-app
+   ```
+
+2. **Configure environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Start the application**
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **Access the application**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+   - API Documentation: http://localhost:8000/docs
+
+### Development Setup
+
+#### Backend Development
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+#### Frontend Development
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+## Project Structure
+
+```
+powerbi-agent-app/
+├── backend/                 # FastAPI backend
+│   ├── app/
+│   │   ├── auth/           # Authentication system
+│   │   ├── chat/           # Chat functionality
+│   │   ├── powerbi/        # PowerBI agent integration
+│   │   ├── database/       # Database models and connection
+│   │   └── core/           # Core configuration and security
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/               # React frontend
+│   ├── src/
+│   │   ├── components/     # React components
+│   │   ├── context/        # React context providers
+│   │   ├── hooks/          # Custom hooks
+│   │   ├── services/       # API services
+│   │   └── styles/         # CSS styles
+│   ├── package.json
+│   └── Dockerfile
+├── docker-compose.yml
+└── .env.example
+```
+
+## Configuration
+
+### PowerBI Configuration
+
+Update your `.env` file with your PowerBI credentials:
+
+```env
+POWERBI_DATASET_ID=your-dataset-id
+POWERBI_WORKSPACE_ID=your-workspace-id
+```
+
+### Custom LLM Configuration
+
+Configure your LLM endpoint in `.env`:
+
+```env
+GPT_API_KEY=your-api-key
+```
+
+## Usage
+
+1. **Register/Login**: Create an account or sign in
+2. **Start Chatting**: Ask questions about your PowerBI data in natural language
+3. **View History**: Access previous conversations from the sidebar
+4. **Real-time Responses**: Get instant responses powered by your PowerBI agent
+
+## API Documentation
+
+The FastAPI backend provides automatic API documentation:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+## Deployment
+
+### Production Deployment
+
+1. **Update environment variables** for production
+2. **Use Docker Compose**:
+   ```bash
+   docker-compose -f docker-compose.prod.yml up -d
+   ```
+
+### Security Considerations
+
+- Change the `SECRET_KEY` in production
+- Use environment-specific database URLs
+- Configure CORS origins appropriately
+- Use HTTPS in production
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.

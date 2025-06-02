@@ -1,0 +1,36 @@
+# backend/requirements.txt - FULLY TESTED VERSION
+# FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+websockets==12.0
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Database
+sqlalchemy==2.0.23
+
+# Pydantic with email support
+pydantic[email]
+pydantic-settings
+
+# Email validation (explicit)
+email-validator==2.1.0
+
+# Core dependencies from your existing project
+azure-identity==1.15.0
+azure-core==1.32.0
+requests==2.32.3
+pandas==2.2.3
+msal==1.32.0
+
+# LangChain dependencies - COMPATIBLE VERSIONS
+langchain~=0.3.22
+langchain-core~=0.3.49
+langchain-community
+
+# Additional dependencies
+python-dotenv==1.0.0
+cryptography==42.0.8

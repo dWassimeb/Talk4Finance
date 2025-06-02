@@ -1,0 +1,40 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///./data/powerbi_agent.db
+      - SECRET_KEY=your-production-secret-key-change-this
+      - GPT_API_KEY=${GPT_API_KEY}
+      - POWERBI_DATASET_ID=${POWERBI_DATASET_ID}
+      - POWERBI_WORKSPACE_ID=${POWERBI_WORKSPACE_ID}
+    volumes:
+      - ./backend/data:/app/data
+    networks:
+      - powerbi-network
+
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - powerbi-network
+
+networks:
+  powerbi-network:
+    driver: bridge
+
+volumes:
+  backend_data:

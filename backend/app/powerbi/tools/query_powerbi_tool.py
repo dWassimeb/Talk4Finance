@@ -1,0 +1,315 @@
+"""
+Enhanced tool for executing DAX queries against PowerBI with improved error handling and query optimization.
+"""
+
+import re
+import logging
+import time
+from typing import Dict, Any, Type, List, Optional
+
+from langchain.tools import BaseTool
+from pydantic import BaseModel, Field
+
+from app.powerbi.utils.powerbi_helper import PowerBIHelper
+from app.powerbi.config import settings
+
+# Configure logging
+logger = logging.getLogger("finsight.tools.query")
+
+# Define input schemas for the tool
+class QueryPowerBIToolInput(BaseModel):
+    """Input for the query PowerBI tool."""
+    query: str = Field(..., description="The DAX query to execute against PowerBI tables.")
+
+class QueryPowerBITool(BaseTool):
+    """Enhanced tool for executing DAX queries with preprocessing and error handling."""
+    name: str = "query_powerbi_tool"
+    description: str = """Run a DAX query against PowerBI tables. Use DAX syntax, not SQL. 
+All DAX queries must start with EVALUATE and must return a table expression. 
+For simple calculations, use ROW() to wrap CALCULATE().
+Always use predefined measures like [CA], [MB], [BUDGET] instead of raw table calculations."""
+    args_schema: Type[BaseModel] = QueryPowerBIToolInput
+
+    # Declare pbi_helper as a field - this is the key fix!
+    pbi_helper: Any = Field(default=None, exclude=True)
+
+    def __init__(self):
+        """Initialize the query tool with PowerBI helper."""
+        super().__init__()
+        self.pbi_helper = PowerBIHelper(settings.DATASET_ID)
+
+    def _clean_query(self, query: str) -> str:
+        """Clean and prepare query string for execution."""
+        # Remove leading/trailing whitespace
+        query = query.strip()
+
+        # Remove triple backticks and language identifiers
+        if query.startswith("```"):
+            # Find the first newline to skip the language identifier
+            first_newline = query.find('\n')
+            if first_newline > 0:
+                # Remove everything before the first content line
+                query = query[first_newline:].strip()
+                # Also remove the closing backticks if present
+                if query.endswith("```"):
+                    query = query[:-3].strip()
+        elif query.endswith("```"):
+            query = query[:-3].strip()
+
+        # Check if the query is wrapped in quotes and remove them
+        if (query.startswith('"') and query.endswith('"')) or \
+                (query.startswith("'") and query.endswith("'")):
+            query = query[1:-1].strip()
+
+        # Remove any language identifiers that appear after EVALUATE
+        query = re.sub(r'EVALUATE\s+[A-Za-z]+\s+', 'EVALUATE ', query, flags=re.IGNORECASE)
+
+        # Remove any nested EVALUATE statements
+        if re.search(r'EVALUATE\s+EVALUATE', query, flags=re.IGNORECASE):
+            query = re.sub(r'EVALUATE\s+', '', query, count=1, flags=re.IGNORECASE)
+
+        # Ensure the query starts with EVALUATE
+        if not re.search(r'^EVALUATE', query, re.IGNORECASE):
+            query = "EVALUATE\n" + query
+
+        # Replace escaped double quotes with single double quotes
+        query = query.replace('""', '"')
+
+        # Remove any tabs or irregular whitespace that could cause issues
+        query = query.replace('\t', '    ')
+
+        return query
+
+    def _diagnose_syntax_error(self, query: str, error_message: str) -> str:
+        """Diagnose common syntax errors and suggest corrections."""
+        diagnoses = []
+
+        # Check for language identifier after EVALUATE
+        if re.search(r"EVALUATE\s+[A-Za-z]+\s+EVALUATE", query, re.IGNORECASE):
+            diagnoses.append("Multiple EVALUATE statements or language identifier in query")
+
+        # Check for missing RETURN in VAR queries
+        if "VAR" in query.upper() and "RETURN" not in query.upper():
+            diagnoses.append("Missing RETURN statement in VAR-based query")
+
+        # Check for potentially unbalanced parentheses
+        open_parens = query.count("(")
+        close_parens = query.count(")")
+        if open_parens != close_parens:
+            diagnoses.append(f"Unbalanced parentheses: {open_parens} opening vs {close_parens} closing")
+
+        # Check for potentially incorrect measure syntax
+        double_bracket_pattern = r'\[\[[^\]]+\]\]'
+        if re.search(double_bracket_pattern, query):
+            diagnoses.append("Double brackets detected in measures, should use single brackets")
+
+        # Check for potentially incorrect N-1 measure syntax
+        incorrect_n1_pattern = r'\[[^\]]+\]/N-1'
+        if re.search(incorrect_n1_pattern, query):
+            diagnoses.append("Incorrect N-1 measure syntax: Use [CA/N-1] instead of [CA]/N-1")
+
+        if diagnoses:
+            return "Syntax issues detected:\n- " + "\n- ".join(diagnoses)
+
+        return "No common syntax issues detected. See error message for details."
+
+    def _is_potentially_invalid_table_expression(self, query: str) -> bool:
+        """Check if this query might be an invalid table expression."""
+        # Extract the part after EVALUATE
+        if "EVALUATE" in query.upper():
+            body = re.sub(r"EVALUATE\s+", "", query, flags=re.IGNORECASE, count=1).strip()
+
+            # Patterns that suggest direct CALCULATE use without table context
+            if body.upper().startswith("CALCULATE(") and not any(func in body.upper() for func in ["ROW(", "SUMMARIZE", "SUMMARIZECOLUMNS", "VALUES", "TOPN", "DISTINCT"]):
+                return True
+
+        return False
+
+    def _fix_invalid_table_expression(self, query: str) -> str:
+        """Fix a query that might be an invalid table expression."""
+        # Extract the part after EVALUATE
+        body = re.sub(r"EVALUATE\s+", "", query, flags=re.IGNORECASE, count=1).strip()
+
+        # If it starts with CALCULATE, wrap it in ROW
+        if body.upper().startswith("CALCULATE("):
+            # Extract any comments before CALCULATE
+            comments = ""
+            calculate_start = body.upper().find("CALCULATE(")
+            if calculate_start > 0:
+                comments = body[:calculate_start]
+                body = body[calculate_start:]
+
+            fixed_query = f"EVALUATE\n{comments}ROW(\"Result\", {body})"
+            return fixed_query
+
+        return query
+
+    def _format_time_series(self, results: List[Dict[str, Any]]) -> str:
+        """Format time series data nicely."""
+        formatted_output = "Time Series Results:\n\n"
+
+        # Identify date/time column and measure columns
+        time_cols = []
+        for col in results[0].keys():
+            col_lower = col.lower()
+            if any(term in col_lower for term in ["mois", "date", "month", "year", "année", "trimestre", "semestre", "jour", "day"]):
+                time_cols.append(col)
+
+        time_col = time_cols[0] if time_cols else list(results[0].keys())[0]
+
+        # Format as bullet points by time period
+        for row in results:
+            time_value = row[time_col]
+            formatted_output += f"• {time_value}:\n"
+
+            for col, val in row.items():
+                if col != time_col:
+                    if isinstance(val, (int, float)):
+                        formatted_value = f"{val:,.2f}"
+                    else:
+                        formatted_value = str(val)
+                    formatted_output += f"  - {col}: {formatted_value}\n"
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _format_table(self, results: List[Dict[str, Any]]) -> str:
+        """Format general table data."""
+        formatted_output = "Query Results:\n\n"
+
+        # Get all column names
+        columns = list(results[0].keys())
+
+        # Format as bullet points
+        for i, row in enumerate(results):
+            formatted_output += f"• Row {i+1}:\n"
+            for col in columns:
+                value = row.get(col, "N/A")
+                if isinstance(value, (int, float)):
+                    formatted_value = f"{value:,.2f}"
+                else:
+                    formatted_value = str(value)
+                formatted_output += f"  - {col}: {formatted_value}\n"
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _format_results(self, result: Dict[str, Any]) -> str:
+        """Format query results in a more readable way."""
+        if isinstance(result, dict):
+            if "error" in result:
+                return f"Error executing query: {result['error']}"
+
+            if "results" in result and len(result["results"]) > 0:
+                results = result["results"]
+
+                # Case 1: Single value result (scalar)
+                if len(results) == 1 and len(results[0]) == 1:
+                    key = list(results[0].keys())[0]
+                    value = results[0][key]
+
+                    if isinstance(value, (int, float)):
+                        return f"{key}: {value:,.2f}"
+                    else:
+                        return f"{key}: {value}"
+
+                # Case 2: Time series data
+                if len(results) > 1 and any(
+                    any(term in col.lower() for term in ["mois", "date", "month", "year", "année"])
+                    for col in results[0].keys()
+                ):
+                    return self._format_time_series(results)
+
+                # Case 3: General table data
+                return self._format_table(results)
+
+            return "Query returned no results."
+
+        return f"Query results:\n\n{str(result)}"
+
+    def _run(self, query: str) -> str:
+        """Execute a DAX query against PowerBI dataset with automatic correction."""
+        logger.info(f"Running query of length {len(query)}")
+        start_time = time.time()
+
+        try:
+            if not query:
+                return "Error: Query is required."
+
+            # Step 1: Clean the query
+            original_query = query
+            cleaned_query = self._clean_query(query)
+
+            # Log both for debugging
+            logger.debug(f"Original query: {original_query}")
+            logger.debug(f"Cleaned query: {cleaned_query}")
+
+            # Step 2: Check if this might be an invalid table expression
+            if self._is_potentially_invalid_table_expression(cleaned_query):
+                # Fix it proactively
+                fixed_query = self._fix_invalid_table_expression(cleaned_query)
+                if fixed_query != cleaned_query:
+                    logger.debug(f"Corrected invalid table expression: {fixed_query}")
+                    cleaned_query = fixed_query
+
+            try:
+                # Step 3: Execute the query
+                logger.info("Executing query")
+                result = self.pbi_helper.execute_query(cleaned_query)
+
+                execution_time = time.time() - start_time
+                logger.info(f"Query executed in {execution_time:.2f}s")
+
+                return self._format_results(result)
+
+            except Exception as first_error:
+                # Step 4: If it fails with specific error, try to fix it
+                error_message = str(first_error)
+                logger.warning(f"Query execution error: {error_message}")
+
+                # Diagnose the syntax error
+                syntax_diagnosis = self._diagnose_syntax_error(cleaned_query, error_message)
+                logger.debug(f"Diagnosis: {syntax_diagnosis}")
+
+                if "not a valid table expression" in error_message:
+                    logger.info("Attempting to fix invalid table expression")
+
+                    # Try to fix the query
+                    fixed_query = self._fix_invalid_table_expression(cleaned_query)
+                    if fixed_query != cleaned_query:
+                        logger.debug(f"Fixed query: {fixed_query}")
+
+                        # Try again with the fixed query
+                        try:
+                            result = self.pbi_helper.execute_query(fixed_query)
+                            return self._format_results(result)
+                        except Exception as second_error:
+                            logger.warning(f"Error with fixed query: {str(second_error)}")
+
+                # If we can't fix it or it fails for another reason, return the original error with diagnosis
+                return f"Error executing query: {error_message}\n\nDiagnosis: {syntax_diagnosis}\n\nAttempted query:\n{cleaned_query}"
+
+        except Exception as e:
+            logger.error(f"Error in query tool: {str(e)}")
+            return f"Error executing query: {str(e)}\n\nAttempted query:\n{query}"
+        finally:
+            total_time = time.time() - start_time
+            logger.info(f"Total query processing time: {total_time:.2f}s")
+
+    def to_openai_function(self) -> Dict[str, Any]:
+        """Convert the tool to an OpenAI function."""
+        schema = {
+            "name": self.name,
+            "description": self.description,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The DAX query to execute against PowerBI tables. Use DAX syntax, not SQL."
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+        return schema

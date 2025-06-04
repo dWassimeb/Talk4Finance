@@ -20,6 +20,10 @@ azure-pipelines.yml
 __pycache__
 *.pyc
 
+# IDE files
+.vscode/
+.idea/
+
 # Node.js
 node_modules/
 

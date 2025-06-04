@@ -14,7 +14,7 @@ variables:
   resourceGroupName: 'rg-castor'
   appName: "Talk4Finance"
   keyVaultName: 'kv-castor2025'
-  secrets: 'MIXTRAL-API-BASE,MIXTRAL-API-KEY,GPT-API-KEY,STORAGE-ACC-NAME,STORAGE-ACC-KEY,POWERBI-DATASET-ID,POWERBI-WORKSPACE-ID'
+  secrets: 'MIXTRAL-API-BASE,MIXTRAL-API-KEY,GPT-API-KEY,STORAGE-ACC-NAME,STORAGE-ACC-KEY'
   containerRegistry: 'crcastor2025.azurecr.io'
   dockerRegistryServiceConnection: '7590ae0d-38bc-404d-b70b-1750549262aa'
   imageRepository: "talk4finance"  # lowercase for Docker compatibility

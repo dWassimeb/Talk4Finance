@@ -1,0 +1,27 @@
+# Git files
+.git
+.gitignore
+
+# Documentation
+README.md
+
+# Environment files
+.env
+
+# Docker files (avoid recursion)
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Azure Pipeline
+azure-pipelines.yml
+
+# Python cache
+__pycache__
+*.pyc
+
+# Node.js
+node_modules/
+
+# Security
+*custom_llm.py

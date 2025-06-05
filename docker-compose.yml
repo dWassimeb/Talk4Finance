@@ -4,30 +4,36 @@
 version: '3.8'
 
 services:
-  talk4finance:
+  talk4finance-backend:
     build:
       context: .
       dockerfile: Dockerfile
       args:
         GPT_API_KEY: ${GPT_API_KEY}
+    command: python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=sqlite:///./data/talk4finance.db
-      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       - GPT_API_KEY=${GPT_API_KEY}
-      - POWERBI_DATASET_ID=${POWERBI_DATASET_ID}
-      - POWERBI_WORKSPACE_ID=${POWERBI_WORKSPACE_ID}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  talk4finance-front:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: npm start
+    ports:
+      - "3000:3000"
+
 
 volumes:
   talk4finance_data:

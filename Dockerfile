@@ -63,12 +63,12 @@ RUN useradd --create-home --shell /bin/bash --uid 1000 appuser \
 USER appuser
 
 # Expose port
-EXPOSE 8000
+EXPOSE 3000
 
 # Health check using FastAPI health endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+  CMD curl -f http://localhost:3000/health || exit 1
 
 # Production-optimized startup command
 # Using python3 -m uvicorn like your development setup, but with production settings
-CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3000", "--workers", "1"]

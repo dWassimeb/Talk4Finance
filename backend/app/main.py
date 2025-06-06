@@ -1,12 +1,15 @@
 # backend/app/main.py
 """
 FastAPI main application for PowerBI Agent
+Updated to serve React frontend in production
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 import json
+import os
 from typing import Dict, List
 import asyncio
 
@@ -24,16 +27,22 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware
+# CORS middleware - Updated for production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://frontend:3000"],  # React app
+    allow_origins=[
+        "http://localhost:3000",           # Local development
+        "http://frontend:3000",            # Docker frontend
+        "http://31.44.217.0",              # Your production domain
+        "https://31.44.217.0",             # HTTPS version
+        "http://localhost:8000",           # Local backend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
+# Include API routers
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 
@@ -109,13 +118,62 @@ async def startup_event():
     """Initialize database on startup"""
     await init_db()
 
-@app.get("/")
-async def root():
-    return {"message": "PowerBI Agent API is running"}
-
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# API info endpoint
+@app.get("/api")
+async def api_info():
+    return {"message": "PowerBI Agent API is running", "version": "1.0.0"}
+
+# Serve static files (CSS, JS, images) from React build
+static_dir = "/app/static"
+if os.path.exists(static_dir):
+    # Check if there's a nested static folder (common in React builds)
+    react_static_dir = os.path.join(static_dir, "static")
+    if os.path.exists(react_static_dir):
+        app.mount("/static", StaticFiles(directory=react_static_dir), name="static")
+
+    # Also serve other assets directly from the main static directory
+    app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
+
+# Serve favicon
+@app.get("/favicon.ico")
+async def favicon():
+    favicon_path = "/app/static/favicon.ico"
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path)
+    return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+
+# IMPORTANT: This catch-all route must be LAST
+# Serve React app for all other routes
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    """
+    Serve React app for all routes that don't match API endpoints.
+    This enables React Router to handle client-side routing.
+    """
+    # Skip API routes, docs, WebSocket
+    if any(full_path.startswith(prefix) for prefix in [
+        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/", "assets/"
+    ]):
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+    # Serve React index.html for all other routes
+    index_path = "/app/static/index.html"
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    else:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "React build not found",
+                "static_exists": os.path.exists("/app/static"),
+                "static_contents": os.listdir("/app/static") if os.path.exists("/app/static") else []
+            }
+        )
 
 if __name__ == "__main__":
     uvicorn.run(

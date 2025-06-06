@@ -9,7 +9,7 @@ README.md
 .env
 
 # Docker files (avoid recursion)
-Dockerfile
+Dockerfile_2
 .dockerignore
 docker-compose*.yml
 

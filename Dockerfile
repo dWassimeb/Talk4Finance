@@ -5,12 +5,15 @@
 FROM node:18-alpine AS frontend-build
 WORKDIR /app/frontend
 
+RUN apt-get update && apt-get install -y \
+    npm
+
 # Handle frontend build or create placeholder
 COPY frontend/package*.json ./
 RUN if [ -f package.json ]; then \
-      npm ci --only=production --silent; \
+      npm install; \
     else \
-      mkdir -p build && echo "No frontend found, creating placeholder"; \
+      echo "No frontend found, creating placeholder"; \
     fi
 
 COPY frontend/ ./
@@ -20,6 +23,8 @@ RUN if [ -f package.json ]; then \
       mkdir -p build && \
       echo '<!DOCTYPE html><html><head><title>Talk4Finance</title></head><body><h1>Talk4Finance API</h1><p>FastAPI Backend Running</p><p><a href="/docs">API Documentation</a></p></body></html>' > build/index.html; \
     fi
+
+
 
 # Python backend stage
 FROM python:3.11-slim
@@ -57,15 +62,18 @@ COPY --from=frontend-build /app/frontend/build ./static
 # Create necessary directories
 RUN mkdir -p /app/data /app/logs
 
+# COpy package json and install dependencies
+COPY frontend/package.json ./
+RUN npm install
+
 # Create non-root user for security
-RUN useradd --create-home --shell /bin/bash --uid 1000 appuser \
-    && chown -R appuser:appuser /app
-USER appuser
+#RUN useradd --create-home --shell /bin/bash --uid 1000 appuser \
+#    && chown -R appuser:appuser /app
+#USER appuser
 
 # Expose port
 EXPOSE 8000
 EXPOSE 3000
-
 
 # Dockerfile
 COPY start.sh /start.sh

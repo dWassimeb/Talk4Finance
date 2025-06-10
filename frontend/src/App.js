@@ -1,4 +1,4 @@
-// frontend/src/App.js - FIXED FOR SUBPATH DEPLOYMENT
+// frontend/src/App.js - SIMPLE FIX
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -10,13 +10,10 @@ import ChatInterface from './components/Chat/ChatInterface';
 import './styles/globals.css';
 
 function App() {
-  // Get basename from environment or default to subpath
-  const basename = process.env.REACT_APP_BASENAME || '/talk4finance';
-
   return (
     <AuthProvider>
       <ChatProvider>
-        <Router basename={basename}>
+        <Router basename="/talk4finance">
           <div className="App">
             <Routes>
               <Route path="/login" element={<Login />} />

@@ -11,7 +11,7 @@ class PowerBIHelper:
     def __init__(self, dataset_id=None, table_names=None):
         """Initialize the PowerBI Helper with dataset ID and credentials."""
         self.dataset_id = dataset_id or settings.DATASET_ID
-        self.credential = DefaultAzureCredential()
+        self.credential = InteractiveBrowserCredential()
         self.token = self.get_token()
         self.base_url = "https://api.powerbi.com/v1.0/myorg"
         self.table_names = table_names or settings.KNOWN_TABLES  # Use config tables if none provided

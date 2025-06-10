@@ -13,8 +13,8 @@ which npm || echo " npm non trouvé"
 which uvicorn || echo " uvi non trouvé"
 
 cd /app/backend
-# Démarrer le backend en arrière-plan
-python3 -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 1 &
+# Démarer le backend en arrière-plan
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 &
 
 #npm run build &
 # Démarrer le frontend en premier plan

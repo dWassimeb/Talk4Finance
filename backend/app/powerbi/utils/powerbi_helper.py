@@ -4,14 +4,14 @@ Helper class for interacting with PowerBI APIs and data.
 
 import requests
 import urllib.parse
-from azure.identity import InteractiveBrowserCredential
+from azure.identity import InteractiveBrowserCredential, DefaultAzureCredential
 from app.powerbi.config import settings
 
 class PowerBIHelper:
     def __init__(self, dataset_id=None, table_names=None):
         """Initialize the PowerBI Helper with dataset ID and credentials."""
         self.dataset_id = dataset_id or settings.DATASET_ID
-        self.credential = InteractiveBrowserCredential()
+        self.credential = DefaultAzureCredential()
         self.token = self.get_token()
         self.base_url = "https://api.powerbi.com/v1.0/myorg"
         self.table_names = table_names or settings.KNOWN_TABLES  # Use config tables if none provided

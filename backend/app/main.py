@@ -1,7 +1,7 @@
-# backend/app/main.py
+# backend/app/main.py - FIXED VERSION
 """
 FastAPI main application for PowerBI Agent
-Updated to serve React frontend in production
+Updated to serve React frontend in production with better networking
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,18 +27,23 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# CORS middleware - Updated for production
+# FIXED: Better CORS middleware for Docker deployment
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",           # Local development
-        "http://frontend:3000",            # Docker frontend
-        "http://31.44.217.0",              # Your production domain
-        "https://31.44.217.0",             # HTTPS version
-        "http://localhost:8000",           # Local backend
+        "http://localhost:3000",           # Local development frontend
+        "http://localhost:3001",           # Docker mapped port
+        "http://frontend:3000",            # Docker frontend service
+        "http://127.0.0.1:3000",          # Alternative localhost
+        "http://127.0.0.1:3001",          # Alternative localhost with mapped port
+        "http://0.0.0.0:3000",            # Docker internal
+        "http://0.0.0.0:3001",            # Docker internal mapped
+        "http://31.44.217.0/talk4finance/",
+        # Add your production domain here when deploying
+        # "https://yourdomain.com",
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -116,28 +121,53 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup"""
+    print("Starting up Talk4Finance API...")
     await init_db()
+    print("Database initialized successfully")
 
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "service": "Talk4Finance API"}
 
 # API info endpoint
 @app.get("/api")
 async def api_info():
-    return {"message": "PowerBI Agent API is running", "version": "1.0.0"}
+    return {
+        "message": "PowerBI Agent API is running",
+        "version": "1.0.0",
+        "endpoints": {
+            "auth": "/api/auth",
+            "chat": "/api/chat",
+            "health": "/health",
+            "docs": "/docs"
+        }
+    }
+
+# CORS preflight handler
+@app.options("/{rest_of_path:path}")
+async def preflight_handler():
+    return JSONResponse(content={}, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    })
 
 # Serve static files (CSS, JS, images) from React build
 static_dir = "/app/static"
 if os.path.exists(static_dir):
+    print(f"Static directory found: {static_dir}")
     # Check if there's a nested static folder (common in React builds)
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
         app.mount("/static", StaticFiles(directory=react_static_dir), name="static")
+        print(f"Mounted React static files from: {react_static_dir}")
 
     # Also serve other assets directly from the main static directory
     app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
+    print(f"Mounted assets from: {static_dir}")
+else:
+    print(f"Warning: Static directory not found: {static_dir}")
 
 # Serve favicon
 @app.get("/favicon.ico")
@@ -166,19 +196,23 @@ async def serve_react_app(full_path: str):
     if os.path.exists(index_path):
         return FileResponse(index_path)
     else:
+        print(f"Warning: React build not found at {index_path}")
         return JSONResponse(
             status_code=500,
             content={
                 "error": "React build not found",
                 "static_exists": os.path.exists("/app/static"),
-                "static_contents": os.listdir("/app/static") if os.path.exists("/app/static") else []
+                "static_contents": os.listdir("/app/static") if os.path.exists("/app/static") else [],
+                "note": "Make sure the frontend build is properly copied to the container"
             }
         )
 
 if __name__ == "__main__":
+    print("Starting Talk4Finance API server...")
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=False,  # Disable reload in production
+        log_level="info"
     )

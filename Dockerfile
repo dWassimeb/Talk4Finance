@@ -1,25 +1,19 @@
-# Talk4Finance Production Dockerfile - Optimized
-# Place this file as: Dockerfile (in root directory)
-
-# Multi-stage build for frontend (if exists)
+# Dockerfile - FIXED VERSION
+# Multi-stage build for frontend
 FROM node:18-alpine AS frontend-build
 WORKDIR /app/frontend
 
-# Handle frontend build or create placeholder
+# Copy frontend package files
 COPY frontend/package*.json ./
-RUN if [ -f package.json ]; then \
-      npm ci --only=production --silent; \
-    else \
-      mkdir -p build && echo "No frontend found, creating placeholder"; \
-    fi
 
+# Install dependencies
+RUN npm ci --only=production --silent
+
+# Copy frontend source
 COPY frontend/ ./
-RUN if [ -f package.json ]; then \
-      npm run build; \
-    else \
-      mkdir -p build && \
-      echo '<!DOCTYPE html><html><head><title>Talk4Finance</title></head><body><h1>Talk4Finance API</h1><p>FastAPI Backend Running</p><p><a href="/docs">API Documentation</a></p></body></html>' > build/index.html; \
-    fi
+
+# Build the frontend
+RUN npm run build
 
 # Python backend stage
 FROM python:3.11-slim
@@ -48,11 +42,14 @@ COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy the backend application (maintaining the app/ structure)
+# Copy the backend application
 COPY backend/ ./
 
 # Copy frontend build to serve static files
 COPY --from=frontend-build /app/frontend/build ./static
+
+# Verify static files were copied
+RUN ls -la /app/static/ || echo "Static directory not found"
 
 # Create necessary directories
 RUN mkdir -p /app/data /app/logs
@@ -65,10 +62,9 @@ USER appuser
 # Expose port
 EXPOSE 8000
 
-# Health check using FastAPI health endpoint
+# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:8000/health || exit 1
 
-# Production-optimized startup command
-# Using python3 -m uvicorn like your development setup, but with production settings
-CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+# Start command with proper logging
+CMD ["python3", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--log-level", "info"]

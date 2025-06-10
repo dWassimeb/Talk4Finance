@@ -1,7 +1,7 @@
-# backend/app/main.py - FIXED FOR SUBPATH DEPLOYMENT
+# backend/app/main.py - FIXED STATIC FILE SERVING
 """
 FastAPI main application for PowerBI Agent
-Updated for subpath deployment behind reverse proxy
+Fixed static file serving for subpath deployment
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,14 +25,14 @@ app = FastAPI(
     title="PowerBI Agent API",
     description="Natural language interface to PowerBI datasets",
     version="1.0.0",
-    root_path="/talk4finance"  # This is crucial for subpath deployment
+    root_path="/talk4finance"  # This tells FastAPI it's deployed under /talk4finance
 )
 
-# CORS middleware for subpath deployment
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",           # Local development frontend
+        "http://localhost:3000",           # Local development
         "http://localhost:3001",           # Docker mapped port
         "http://127.0.0.1:3000",          # Alternative localhost
         "http://127.0.0.1:3001",          # Alternative localhost with mapped port
@@ -78,60 +78,33 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     try:
         while True:
-            # Receive message from client
             data = await websocket.receive_text()
             message_data = json.loads(data)
-
-            # Process the message
             question = message_data.get("message", "")
             conversation_id = message_data.get("conversation_id")
 
             if question:
-                # Send typing indicator
-                await manager.send_message(user_id, {
-                    "type": "typing",
-                    "typing": True
-                })
-
+                await manager.send_message(user_id, {"type": "typing", "typing": True})
                 try:
-                    # Get response from PowerBI agent
                     response = await chat_service.process_message(
-                        user_id=user_id,
-                        message=question,
-                        conversation_id=conversation_id
+                        user_id=user_id, message=question, conversation_id=conversation_id
                     )
-
-                    # Send response back to client
-                    await manager.send_message(user_id, {
-                        "type": "message",
-                        "response": response,
-                        "typing": False
-                    })
-
+                    await manager.send_message(user_id, {"type": "message", "response": response, "typing": False})
                 except Exception as e:
-                    # Send error message
-                    await manager.send_message(user_id, {
-                        "type": "error",
-                        "error": f"Error processing your question: {str(e)}",
-                        "typing": False
-                    })
-
+                    await manager.send_message(user_id, {"type": "error", "error": f"Error: {str(e)}", "typing": False})
     except WebSocketDisconnect:
         manager.disconnect(user_id)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup"""
     print("Starting up Talk4Finance API...")
     await init_db()
     print("Database initialized successfully")
 
-# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "Talk4Finance API", "subpath": "/talk4finance"}
 
-# API info endpoint
 @app.get("/api")
 async def api_info():
     return {
@@ -146,7 +119,41 @@ async def api_info():
         }
     }
 
-# CORS preflight handler
+# CRITICAL: Mount static files BEFORE the catch-all route
+static_dir = "/app/static"
+if os.path.exists(static_dir):
+    print(f"Static directory found: {static_dir}")
+
+    # Check for React build structure
+    react_static_dir = os.path.join(static_dir, "static")
+    if os.path.exists(react_static_dir):
+        # React puts JS/CSS in a nested static folder
+        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
+        print(f"Mounted React nested static files from: {react_static_dir}")
+
+    # Also mount the main static directory for other assets
+    app.mount("/assets", StaticFiles(directory=static_dir), name="main_static")
+    print(f"Mounted main static directory: {static_dir}")
+else:
+    print(f"Warning: Static directory not found: {static_dir}")
+
+# Specific route for favicon
+@app.get("/favicon.ico")
+async def favicon():
+    favicon_path = "/app/static/favicon.ico"
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path)
+    return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+
+# Specific route for manifest
+@app.get("/manifest.json")
+async def manifest():
+    manifest_path = "/app/static/manifest.json"
+    if os.path.exists(manifest_path):
+        return FileResponse(manifest_path)
+    return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+
+# Handle CORS preflight
 @app.options("/{rest_of_path:path}")
 async def preflight_handler():
     return JSONResponse(content={}, headers={
@@ -155,80 +162,44 @@ async def preflight_handler():
         "Access-Control-Allow-Headers": "*",
     })
 
-# Mount static files with subpath support
-static_dir = "/app/static"
-if os.path.exists(static_dir):
-    print(f"Static directory found: {static_dir}")
-
-    # Mount React static files at /static (they'll be accessible at /talk4finance/static)
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-    print(f"Mounted static files from: {static_dir}")
-
-    # Also check for nested static folder
-    react_static_dir = os.path.join(static_dir, "static")
-    if os.path.exists(react_static_dir):
-        # This will handle /static/js, /static/css etc.
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
-        print(f"Mounted React static files from: {react_static_dir}")
-else:
-    print(f"Warning: Static directory not found: {static_dir}")
-
-# Serve favicon
-@app.get("/favicon.ico")
-async def favicon():
-    favicon_path = "/app/static/favicon.ico"
-    if os.path.exists(favicon_path):
-        return FileResponse(favicon_path)
-    return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
-
-# Serve React app for root and other routes
-@app.get("/")
-async def serve_react_root():
-    """Serve React app for root path"""
-    index_path = "/app/static/index.html"
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    else:
-        return JSONResponse(
-            status_code=500,
-            content={"error": "React build not found", "path": index_path}
-        )
-
 # IMPORTANT: This catch-all route must be LAST
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
     """
-    Serve React app for all routes that don't match API endpoints.
-    This enables React Router to handle client-side routing.
+    Serve React app for all unmatched routes.
+    This must be the last route defined.
     """
-    # Skip API routes, docs, WebSocket, static files
+    print(f"Catch-all route hit with path: {full_path}")
+
+    # Let API routes, docs, websockets, and static files pass through
     if any(full_path.startswith(prefix) for prefix in [
-        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/"
+        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/", "assets/"
     ]):
+        print(f"Path {full_path} should be handled by other routes, returning 404")
         return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
 
-    # Serve React index.html for all other routes
+    # For all other paths, serve React index.html
     index_path = "/app/static/index.html"
     if os.path.exists(index_path):
+        print(f"Serving React index.html for path: {full_path}")
         return FileResponse(index_path)
     else:
-        print(f"Warning: React build not found at {index_path}")
+        print(f"React index.html not found at {index_path}")
+        static_contents = []
+        if os.path.exists("/app/static"):
+            static_contents = os.listdir("/app/static")
+
         return JSONResponse(
             status_code=500,
             content={
                 "error": "React build not found",
+                "index_path": index_path,
                 "static_exists": os.path.exists("/app/static"),
-                "static_contents": os.listdir("/app/static") if os.path.exists("/app/static") else [],
+                "static_contents": static_contents,
                 "requested_path": full_path
             }
         )
 
 if __name__ == "__main__":
     print("Starting Talk4Finance API server...")
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False, # Reload disabled for production
-        log_level="info"
-    )
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False, log_level="info")

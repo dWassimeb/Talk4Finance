@@ -39,6 +39,7 @@ app.add_middleware(
         "http://0.0.0.0:3000",            # Docker internal
         "http://0.0.0.0:3001",            # Docker internal mapped
         "http://31.44.217.0/talk4finance/",
+        "http://castor.iagen-ov.fr/talk4finance/",
         "http://castor.iagen-ov.fr/talk4finance",
         # Add your production domain here when deploying
         # "https://yourdomain.com",

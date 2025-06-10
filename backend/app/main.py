@@ -1,11 +1,11 @@
-# backend/app/main.py - FIXED VERSION
+# backend/app/main.py - FIXED FOR SUBPATH DEPLOYMENT
 """
 FastAPI main application for PowerBI Agent
-Updated to serve React frontend in production with better networking
+Updated for subpath deployment behind reverse proxy
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import json
@@ -20,29 +20,28 @@ from app.database.connection import init_db
 from app.chat.services import ChatService
 from app.core.config import settings
 
-# Initialize FastAPI app
+# Initialize FastAPI app with subpath support
 app = FastAPI(
     title="PowerBI Agent API",
     description="Natural language interface to PowerBI datasets",
-    version="1.0.0"
+    version="1.0.0",
+    root_path="/talk4finance"  # This is crucial for subpath deployment
 )
 
-# FIXED: Better CORS middleware for Docker deployment
+# CORS middleware for subpath deployment
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",           # Local development frontend
         "http://localhost:3001",           # Docker mapped port
-        "http://frontend:3000",            # Docker frontend service
         "http://127.0.0.1:3000",          # Alternative localhost
         "http://127.0.0.1:3001",          # Alternative localhost with mapped port
-        "http://0.0.0.0:3000",            # Docker internal
-        "http://0.0.0.0:3001",            # Docker internal mapped
-        "http://31.44.217.0/talk4finance/",
-        "http://castor.iagen-ov.fr/talk4finance/",
-        "http://castor.iagen-ov.fr/talk4finance",
-        # Add your production domain here when deploying
-        # "https://yourdomain.com",
+        "http://31.44.217.0",             # Production domain root
+        "http://31.44.217.0/talk4finance", # Production domain with subpath
+        "http://castor.iagen-ov.fr",      # Production domain root
+        "http://castor.iagen-ov.fr/talk4finance", # Production domain with subpath
+        "https://castor.iagen-ov.fr",     # HTTPS version
+        "https://castor.iagen-ov.fr/talk4finance", # HTTPS version with subpath
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -130,7 +129,7 @@ async def startup_event():
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "service": "Talk4Finance API"}
+    return {"status": "healthy", "service": "Talk4Finance API", "subpath": "/talk4finance"}
 
 # API info endpoint
 @app.get("/api")
@@ -138,11 +137,12 @@ async def api_info():
     return {
         "message": "PowerBI Agent API is running",
         "version": "1.0.0",
+        "subpath": "/talk4finance",
         "endpoints": {
-            "auth": "/api/auth",
-            "chat": "/api/chat",
-            "health": "/health",
-            "docs": "/docs"
+            "auth": "/talk4finance/api/auth",
+            "chat": "/talk4finance/api/chat",
+            "health": "/talk4finance/health",
+            "docs": "/talk4finance/docs"
         }
     }
 
@@ -155,19 +155,21 @@ async def preflight_handler():
         "Access-Control-Allow-Headers": "*",
     })
 
-# Serve static files (CSS, JS, images) from React build
+# Mount static files with subpath support
 static_dir = "/app/static"
 if os.path.exists(static_dir):
     print(f"Static directory found: {static_dir}")
-    # Check if there's a nested static folder (common in React builds)
+
+    # Mount React static files at /static (they'll be accessible at /talk4finance/static)
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    print(f"Mounted static files from: {static_dir}")
+
+    # Also check for nested static folder
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="static")
+        # This will handle /static/js, /static/css etc.
+        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
         print(f"Mounted React static files from: {react_static_dir}")
-
-    # Also serve other assets directly from the main static directory
-    app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
-    print(f"Mounted assets from: {static_dir}")
 else:
     print(f"Warning: Static directory not found: {static_dir}")
 
@@ -179,19 +181,31 @@ async def favicon():
         return FileResponse(favicon_path)
     return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
 
+# Serve React app for root and other routes
+@app.get("/")
+async def serve_react_root():
+    """Serve React app for root path"""
+    index_path = "/app/static/index.html"
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    else:
+        return JSONResponse(
+            status_code=500,
+            content={"error": "React build not found", "path": index_path}
+        )
+
 # IMPORTANT: This catch-all route must be LAST
-# Serve React app for all other routes
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
     """
     Serve React app for all routes that don't match API endpoints.
     This enables React Router to handle client-side routing.
     """
-    # Skip API routes, docs, WebSocket
+    # Skip API routes, docs, WebSocket, static files
     if any(full_path.startswith(prefix) for prefix in [
-        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/", "assets/"
+        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/"
     ]):
-        return JSONResponse(status_code=404, content={"detail": "Not found"})
+        return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
 
     # Serve React index.html for all other routes
     index_path = "/app/static/index.html"
@@ -205,7 +219,7 @@ async def serve_react_app(full_path: str):
                 "error": "React build not found",
                 "static_exists": os.path.exists("/app/static"),
                 "static_contents": os.listdir("/app/static") if os.path.exists("/app/static") else [],
-                "note": "Make sure the frontend build is properly copied to the container"
+                "requested_path": full_path
             }
         )
 
@@ -215,6 +229,6 @@ if __name__ == "__main__":
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=False,  # Disable reload in production
+        reload=False, # Reload disabled for production
         log_level="info"
     )

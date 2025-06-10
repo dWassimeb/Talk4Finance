@@ -1,27 +1,33 @@
-// frontend/src/services/api.js - FIXED VERSION
+// frontend/src/services/api.js - FIXED FOR SUBPATH DEPLOYMENT
 import axios from 'axios';
 
-// FIXED: Dynamic API URL based on environment
+// Smart API URL detection for subpath deployment
 const getApiBaseUrl = () => {
-  // In production (Docker), use the current host with the mapped port
+  // 1. Check for explicit environment variable first
+  if (process.env.REACT_APP_API_URL) {
+    console.log('Using explicit API URL:', process.env.REACT_APP_API_URL);
+    return process.env.REACT_APP_API_URL;
+  }
+
+  // 2. For production deployment with subpath (like /talk4finance/)
   if (process.env.NODE_ENV === 'production') {
-    // When running in Docker with port mapping, use the external port
-    return window.location.origin.replace(window.location.port, '3001');
+    // When deployed behind reverse proxy with subpath
+    const currentUrl = window.location.origin + window.location.pathname;
+
+    // Remove trailing slash and add if not present
+    const baseUrl = currentUrl.endsWith('/') ? currentUrl.slice(0, -1) : currentUrl;
+
+    console.log('Production subpath mode:', baseUrl);
+    return baseUrl;
   }
 
-  // For development, check if we're running in a containerized environment
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    // Running in Docker or deployed environment
-    return `${window.location.protocol}//${window.location.hostname}:3001`;
-  }
-
-  // Local development
-  return process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  // 3. Development mode
+  console.log('Development mode: using localhost:8000');
+  return 'http://localhost:8000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
-
-console.log('API Base URL:', API_BASE_URL); // Debug log
+console.log('Final API Base URL:', API_BASE_URL);
 
 // Create axios instance
 const api = axios.create({
@@ -29,33 +35,52 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000, // 10 second timeout
+  timeout: 15000, // Increased timeout for network latency
 });
 
-// Add auth token to requests
+// Add request interceptor for auth and debugging
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // Log the full URL being called for debugging
+    const fullUrl = `${config.baseURL}${config.url}`;
+    console.log(`API Call: ${config.method?.toUpperCase()} ${fullUrl}`);
+
     return config;
   },
   (error) => {
+    console.error('Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
-// Handle auth errors
+// Add response interceptor for error handling and debugging
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`API Success: ${response.status} ${response.config.method?.toUpperCase()} ${response.config.url}`);
+    return response;
+  },
   (error) => {
-    console.error('API Error:', error.response || error.message);
+    console.error('API Error Details:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      baseURL: error.config?.baseURL,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      message: error.message,
+      data: error.response?.data
+    });
 
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      // Use relative path for redirect to work with subpath
+      window.location.href = './login';
     }
+
     return Promise.reject(error);
   }
 );

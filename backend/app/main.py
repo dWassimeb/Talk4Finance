@@ -39,8 +39,6 @@ app.add_middleware(
         "http://31.44.217.0/talk4finance",
         "http://castor.iagen-ov.fr",
         "http://castor.iagen-ov.fr/talk4finance",
-        "https://castor.iagen-ov.fr",
-        "https://castor.iagen-ov.fr/talk4finance",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],

@@ -6,7 +6,7 @@
 README.md
 
 # Environment files
-Standby.env
+.env
 
 # Docker files (avoid recursion)
 Dockerfile_2

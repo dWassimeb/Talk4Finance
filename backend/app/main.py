@@ -25,7 +25,7 @@ app = FastAPI(
     title="PowerBI Agent API",
     description="Natural language interface to PowerBI datasets",
     version="1.0.0",
-    root_path="/talk4finance"  # This tells FastAPI it's deployed under /talk4finance
+    root_path="/talk4finance"
 )
 
 # CORS middleware

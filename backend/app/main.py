@@ -1,7 +1,7 @@
-# backend/app/main.py - FIXED VERSION
+# backend/app/main.py - CORRECTED VERSION
 """
 FastAPI main application for PowerBI Agent
-Updated to serve React frontend in production with better networking
+Fixed static file serving for subpath deployment
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,14 +20,15 @@ from app.database.connection import init_db
 from app.chat.services import ChatService
 from app.core.config import settings
 
-# Initialize FastAPI app
+# Initialize FastAPI app with root_path for subpath deployment
 app = FastAPI(
     title="PowerBI Agent API",
     description="Natural language interface to PowerBI datasets",
-    version="1.0.0"
+    version="1.0.0",
+    root_path="/talk4finance"  # CRITICAL: This tells FastAPI about the subpath
 )
 
-# FIXED: Better CORS middleware for Docker deployment
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -38,11 +39,12 @@ app.add_middleware(
         "http://127.0.0.1:3001",          # Alternative localhost with mapped port
         "http://0.0.0.0:3000",            # Docker internal
         "http://0.0.0.0:3001",            # Docker internal mapped
-        "http://31.44.217.0/talk4finance/",
-        "http://castor.iagen-ov.fr/talk4finance/",
+        "http://31.44.217.0",
+        "http://31.44.217.0/talk4finance",
+        "http://castor.iagen-ov.fr",
         "http://castor.iagen-ov.fr/talk4finance",
-        # Add your production domain here when deploying
-        # "https://yourdomain.com",
+        "https://castor.iagen-ov.fr",
+        "https://castor.iagen-ov.fr/talk4finance",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -79,53 +81,49 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
     try:
         while True:
-            # Receive message from client
             data = await websocket.receive_text()
             message_data = json.loads(data)
-
-            # Process the message
             question = message_data.get("message", "")
             conversation_id = message_data.get("conversation_id")
 
             if question:
-                # Send typing indicator
-                await manager.send_message(user_id, {
-                    "type": "typing",
-                    "typing": True
-                })
-
+                await manager.send_message(user_id, {"type": "typing", "typing": True})
                 try:
-                    # Get response from PowerBI agent
                     response = await chat_service.process_message(
-                        user_id=user_id,
-                        message=question,
-                        conversation_id=conversation_id
+                        user_id=user_id, message=question, conversation_id=conversation_id
                     )
-
-                    # Send response back to client
-                    await manager.send_message(user_id, {
-                        "type": "message",
-                        "response": response,
-                        "typing": False
-                    })
-
+                    await manager.send_message(user_id, {"type": "message", "response": response, "typing": False})
                 except Exception as e:
-                    # Send error message
-                    await manager.send_message(user_id, {
-                        "type": "error",
-                        "error": f"Error processing your question: {str(e)}",
-                        "typing": False
-                    })
-
+                    await manager.send_message(user_id, {"type": "error", "error": f"Error: {str(e)}", "typing": False})
     except WebSocketDisconnect:
         manager.disconnect(user_id)
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize database on startup"""
-    print("Starting up Talk4Finance API...")
+    print("🚀 Starting up Talk4Finance API...")
     await init_db()
-    print("Database initialized successfully")
+    print("✅ Database initialized successfully")
+
+    # Debug static files
+    static_dir = "/app/static"
+    if os.path.exists(static_dir):
+        print(f"📁 Static directory contents: {os.listdir(static_dir)}")
+
+        react_static_dir = os.path.join(static_dir, "static")
+        if os.path.exists(react_static_dir):
+            print(f"📁 React static directory contents: {os.listdir(react_static_dir)}")
+
+            js_dir = os.path.join(react_static_dir, "js")
+            if os.path.exists(js_dir):
+                js_files = os.listdir(js_dir)
+                print(f"📁 JS files: {js_files}")
+                # Check first JS file content
+                if js_files:
+                    js_file_path = os.path.join(js_dir, js_files[0])
+                    with open(js_file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        first_line = f.readline().strip()
+                        print(f"🔍 First line of {js_files[0]}: {first_line[:100]}")
 
 # Health check endpoint
 @app.get("/health")
@@ -135,16 +133,7 @@ async def health_check():
 # API info endpoint
 @app.get("/api")
 async def api_info():
-    return {
-        "message": "PowerBI Agent API is running",
-        "version": "1.0.0",
-        "endpoints": {
-            "auth": "/api/auth",
-            "chat": "/api/chat",
-            "health": "/health",
-            "docs": "/docs"
-        }
-    }
+    return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
 # CORS preflight handler
 @app.options("/{rest_of_path:path}")
@@ -155,23 +144,25 @@ async def preflight_handler():
         "Access-Control-Allow-Headers": "*",
     })
 
-# Serve static files (CSS, JS, images) from React build
+# CRITICAL: Mount static files BEFORE defining any other routes
 static_dir = "/app/static"
 if os.path.exists(static_dir):
-    print(f"Static directory found: {static_dir}")
-    # Check if there's a nested static folder (common in React builds)
+    print(f"📁 Static directory found: {static_dir}")
+
+    # React puts built files in /app/static/static/ subdirectory
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="static")
-        print(f"Mounted React static files from: {react_static_dir}")
-
-    # Also serve other assets directly from the main static directory
-    app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
-    print(f"Mounted assets from: {static_dir}")
+        print(f"✅ Mounting React static files from: {react_static_dir}")
+        # Mount ONLY the React static files, not the whole directory
+        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
+    else:
+        print(f"❌ React static subdirectory not found at: {react_static_dir}")
+        print(f"🔄 Attempting to mount main static directory: {static_dir}")
+        app.mount("/static", StaticFiles(directory=static_dir), name="main_static")
 else:
-    print(f"Warning: Static directory not found: {static_dir}")
+    print(f"❌ Static directory not found: {static_dir}")
 
-# Serve favicon
+# Handle individual assets that are in the root of static
 @app.get("/favicon.ico")
 async def favicon():
     favicon_path = "/app/static/favicon.ico"
@@ -179,42 +170,46 @@ async def favicon():
         return FileResponse(favicon_path)
     return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
 
+@app.get("/manifest.json")
+async def manifest():
+    manifest_path = "/app/static/manifest.json"
+    if os.path.exists(manifest_path):
+        return FileResponse(manifest_path)
+    return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+
 # IMPORTANT: This catch-all route must be LAST
-# Serve React app for all other routes
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
     """
-    Serve React app for all routes that don't match API endpoints.
+    Serve React app for all routes that don't match API endpoints or static files.
     This enables React Router to handle client-side routing.
     """
-    # Skip API routes, docs, WebSocket
-    if any(full_path.startswith(prefix) for prefix in [
-        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/", "assets/"
-    ]):
-        return JSONResponse(status_code=404, content={"detail": "Not found"})
+    print(f"🔍 Catch-all route hit for: {full_path}")
 
-    # Serve React index.html for all other routes
+    # DO NOT serve index.html for API routes, docs, websockets, or static files
+    if any(full_path.startswith(prefix) for prefix in [
+        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/"
+    ]):
+        print(f"❌ Should not reach catch-all: {full_path}")
+        return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
+
+    # Serve React index.html for all other routes (React Router will handle routing)
     index_path = "/app/static/index.html"
     if os.path.exists(index_path):
+        print(f"✅ Serving React index.html for route: {full_path}")
         return FileResponse(index_path)
     else:
-        print(f"Warning: React build not found at {index_path}")
+        print(f"❌ React index.html not found at: {index_path}")
+        static_contents = os.listdir("/app/static") if os.path.exists("/app/static") else []
         return JSONResponse(
             status_code=500,
             content={
                 "error": "React build not found",
                 "static_exists": os.path.exists("/app/static"),
-                "static_contents": os.listdir("/app/static") if os.path.exists("/app/static") else [],
-                "note": "Make sure the frontend build is properly copied to the container"
+                "static_contents": static_contents
             }
         )
 
 if __name__ == "__main__":
-    print("Starting Talk4Finance API server...")
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=False,  # Disable reload in production
-        log_level="info"
-    )
+    print("🚀 Starting Talk4Finance API server...")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False, log_level="info")

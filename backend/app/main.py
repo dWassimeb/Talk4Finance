@@ -125,42 +125,6 @@ if os.path.exists(static_dir):
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
-# Handle specific files in the root of static
-@app.get("/favicon.ico")
-async def favicon():
-    favicon_path = "/app/static/favicon.ico"
-    if os.path.exists(favicon_path):
-        print(f"✅ Serving favicon from: {favicon_path}")
-        return FileResponse(favicon_path)
-    print(f"❌ Favicon not found at: {favicon_path}")
-    return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
-
-@app.get("/manifest.json")
-async def manifest():
-    # Try to serve the actual manifest.json if it exists
-    manifest_path = "/app/static/manifest.json"
-    if os.path.exists(manifest_path):
-        print(f"✅ Serving manifest from: {manifest_path}")
-        return FileResponse(manifest_path)
-
-    # If not found, return a basic PWA manifest
-    print(f"❌ Manifest not found, returning basic manifest")
-    basic_manifest = {
-        "short_name": "Talk4Finance",
-        "name": "Talk4Finance - AI Financial Agent",
-        "icons": [
-            {
-                "src": "/talk4finance/favicon.ico",
-                "sizes": "64x64 32x32 24x24 16x16",
-                "type": "image/x-icon"
-            }
-        ],
-        "start_url": "/talk4finance/",
-        "display": "standalone",
-        "theme_color": "#00ACB5",
-        "background_color": "#ffffff"
-    }
-    return JSONResponse(content=basic_manifest)
 
 # CORS preflight handler
 @app.options("/{rest_of_path:path}")

@@ -6,8 +6,8 @@ WORKDIR /app/frontend
 # Copy frontend package files
 COPY frontend/package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production --silent
+# Install ALL dependencies (including dev dependencies needed for build)
+RUN npm ci
 
 # Copy frontend source
 COPY frontend/ ./
@@ -46,7 +46,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY backend/ ./
 
 # Copy frontend build to serve static files
-COPY --from=frontend-build /app/frontend/build ./static
+COPY --from=frontend-build /app/frontend/dist ./static
 
 # Verify static files were copied
 RUN ls -la /app/static/ || echo "Static directory not found"

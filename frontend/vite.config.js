@@ -5,14 +5,14 @@ import path from 'path';
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/talk4finance/',
+  base: '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
-    port: 3000,
+    port: 3001,
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
@@ -27,5 +27,13 @@ export default defineConfig({
     assetsDir: 'assets',
     manifest: true,
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+        assetFileNames: 'assets/[name].[hash][extname]',
+        chunkFileNames: 'assets/[name].[hash].js',
+        entryFileNames: 'assets/[name].[hash].js',
+      },
+    },
   },
 });

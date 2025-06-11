@@ -1,19 +1,19 @@
 # Dockerfile - FIXED VERSION
 # Multi-stage build for frontend
-FROM node:18-alpine AS frontend-build
-WORKDIR /app/frontend
+#FROM node:18-alpine AS frontend-build
+#WORKDIR /app/frontend
 
 # Copy frontend package files
-COPY frontend/package*.json ./
+#COPY frontend/package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production --silent
+#RUN npm ci --only=production --silent
 
 # Copy frontend source
-COPY frontend/ ./
+#COPY frontend/ ./
 
 # Build the frontend
-RUN npm run build
+#RUN npm run build
 
 # Python backend stage
 FROM python:3.11-slim
@@ -46,7 +46,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY backend/ ./
 
 # Copy frontend build to serve static files
-COPY --from=frontend-build /app/frontend/build ./static
+#COPY --from=frontend-build /app/frontend/build ./static
+
+COPY frontend/dist ./static
 
 # Verify static files were copied
 RUN ls -la /app/static/ || echo "Static directory not found"

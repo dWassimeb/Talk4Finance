@@ -7,7 +7,7 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production --silent
+RUN npm install
 
 # Copy frontend source
 COPY frontend/ ./

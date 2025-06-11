@@ -110,7 +110,8 @@ async def api_info():
     return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
 # CRITICAL: Mount static files FIRST, before any other routes
-static_dir = "/app/static"
+#static_dir = "/app/static"
+static_dir = "/Users/wassime/Desktop/Talk4Finance/frontend/build"
 if os.path.exists(static_dir):
     print(f"📁 Static directory found: {static_dir}")
 
@@ -151,7 +152,8 @@ async def serve_react_app(full_path: str):
         return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
 
     # Serve React index.html for all other routes
-    index_path = "/app/static/index.html"
+    #index_path = "/app/static/index.html"
+    index_path = "/Users/wassime/Desktop/Talk4Finance/frontend/build/index.html"
     if os.path.exists(index_path):
         print(f"✅ Serving React index.html for route: {full_path}")
         return FileResponse(index_path)

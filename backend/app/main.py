@@ -33,7 +33,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",           # Local development frontend
         "http://localhost:3001",           # Docker mapped port
-        "http://frontend:3000",            # Docker frontend service
+        "http://localhost:3002",           # Docker mapped port
         "http://127.0.0.1:3000",          # Alternative localhost
         "http://127.0.0.1:3001",          # Alternative localhost with mapped port
         "http://0.0.0.0:3000",            # Docker internal

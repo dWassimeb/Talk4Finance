@@ -2,7 +2,7 @@
   "name": "powerbi-agent-frontend",
   "version": "1.0.0",
   "private": true,
-  "homepage": "/",
+  "homepage": "./",
   "dependencies": {
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^5.16.5",

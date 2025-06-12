@@ -99,7 +99,7 @@ async def startup_event():
     await init_db()
     print("✅ Database initialized successfully")
 
-# Health check endpoint
+# Health check endpoints
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "Talk4Finance API"}

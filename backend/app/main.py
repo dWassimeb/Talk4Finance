@@ -1,23 +1,26 @@
-# backend/app/main.py - CLEAN VERSION
+# backend/app/main.py - FIXED VERSION WITHOUT ROOT_PATH
 """
 FastAPI main application for PowerBI Agent
-Serves React frontend and provides API endpoints
+Fixed to work with nginx prefix stripping
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 import json
 import os
-from typing import Dict
+from typing import Dict, List
+import asyncio
 
 from app.auth.routes import auth_router
 from app.chat.routes import chat_router
+from app.auth.dependencies import get_current_user
 from app.database.connection import init_db
 from app.chat.services import ChatService
+from app.core.config import settings
 
-# Initialize FastAPI app
+# Initialize FastAPI app WITHOUT root_path (nginx will strip the prefix)
 app = FastAPI(
     title="PowerBI Agent API",
     description="Natural language interface to PowerBI datasets",
@@ -28,10 +31,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",           # Local development
-        "http://localhost:8000",           # Local backend testing
-        "http://castor.iagen-ov.fr",       # Production domain
-        "http://castor.iagen-ov.fr/talk4finance",  # Production with subpath
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://31.44.217.0",
+        "http://31.44.217.0/talk4finance",
+        "http://castor.iagen-ov.fr",
+        "http://castor.iagen-ov.fr/talk4finance",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -92,47 +99,66 @@ async def startup_event():
     await init_db()
     print("✅ Database initialized successfully")
 
-# API endpoints
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "Talk4Finance API"}
 
+# API info endpoint
 @app.get("/api")
 async def api_info():
     return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
-# Static files setup
-static_dir = "/app/static"  # Docker path
-# static_dir = "/Users/wassime/Desktop/Talk4Finance/frontend/build"  # Local testing
-
+# CRITICAL: Mount static files FIRST, before any other routes
+static_dir = "/app/static"
+#static_dir = "/Users/wassime/Desktop/Talk4Finance/frontend/build"
 if os.path.exists(static_dir):
     print(f"📁 Static directory found: {static_dir}")
 
-    # Check for React's nested static directory structure
+    # React puts built files in /app/static/static/ subdirectory
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
         print(f"✅ Mounting React static files from: {react_static_dir}")
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="static")
+        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
     else:
-        print(f"⚠️  No nested static dir, mounting main directory: {static_dir}")
-        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+        print(f"❌ React static subdirectory not found")
+        app.mount("/static", StaticFiles(directory=static_dir), name="main_static")
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
-# Catch-all route for React Router (MUST BE LAST)
+
+# CORS preflight handler
+@app.options("/{rest_of_path:path}")
+async def preflight_handler():
+    return JSONResponse(content={}, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    })
+
+# IMPORTANT: This catch-all route must be LAST
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
-    """Serve React app for all non-API routes"""
+    """
+    Serve React app for all routes that don't match API endpoints or static files.
+    """
+    print(f"🔍 Catch-all route hit for: {full_path}")
 
-    # Don't serve React for API routes or static files
-    if any(full_path.startswith(prefix) for prefix in ["api/", "ws/", "health", "docs", "static/"]):
+    # Skip API routes, docs, websockets, and static files
+    if any(full_path.startswith(prefix) for prefix in [
+        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/"
+    ]):
+        print(f"❌ API/Static route should not reach catch-all: {full_path}")
         return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
 
     # Serve React index.html for all other routes
-    index_path = os.path.join(static_dir, "index.html")
+    index_path = "/app/static/index.html"
+    #index_path = "/Users/wassime/Desktop/Talk4Finance/frontend/build/index.html"
     if os.path.exists(index_path):
+        print(f"✅ Serving React index.html for route: {full_path}")
         return FileResponse(index_path)
     else:
+        print(f"❌ React index.html not found at: {index_path}")
         return JSONResponse(
             status_code=500,
             content={"error": "React build not found", "path": index_path}
@@ -140,4 +166,4 @@ async def serve_react_app(full_path: str):
 
 if __name__ == "__main__":
     print("🚀 Starting Talk4Finance API server...")
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False, log_level="info")

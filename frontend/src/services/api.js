@@ -1,15 +1,14 @@
-// frontend/src/services/api.js - SIMPLE FIX
+// frontend/src/services/api.js - NO SUBPATH (nginx handles routing)
 import axios from 'axios';
 
 const getApiBaseUrl = () => {
-  // For local development
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:8000';
   }
 
-  // For production deployment with reverse proxy
-  // Just use current origin + subpath (no port manipulation needed)
-  return `${window.location.origin}/talk4finance`;
+  // For production: nginx strips /talk4finance/ before forwarding to FastAPI
+  // So React app sees URLs like: /api/auth/login (not /talk4finance/api/auth/login)
+  return window.location.origin + window.location.pathname.replace(/\/$/, '');
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -29,9 +28,12 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    console.log(`🚀 API Call: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     return config;
   },
   (error) => {
+    console.error('❌ Request error:', error);
     return Promise.reject(error);
   }
 );
@@ -39,11 +41,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('API Error:', error.response || error.message);
+    console.error('❌ API Error:', error.response || error.message);
 
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/talk4finance/login';
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }

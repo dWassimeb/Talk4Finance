@@ -169,8 +169,8 @@ class PowerBIAgentService:
                    - Always filter by numerical values, not text
 
                 5. Always filter clients using DIM_CLIENT:
-                   - Correct: DIM_CLIENT[CLIENT_NOM] = "Acme Corp"
-                   - Link with GL: Through GL[Client] = DIM_CLIENT[CLIENT_ID]
+                   - Correct: DIM_CLIENT[RAISON_SOCIAL_DO] = "Acme Corp"
+                   - Link with GL: Through GL[Client_Lib] = DIM_CLIENT[RAISON_SOCIAL_DO]
 
                 6. Always filter products using MAPPING_PRODUIT:
                    - Correct: MAPPING_PRODUIT[Produit] = "Product Name" or MAPPING_PRODUIT[Code Produit] = "P123"

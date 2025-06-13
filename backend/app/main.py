@@ -3,7 +3,7 @@
 FastAPI main application for PowerBI Agent
 Fixed to work with nginx prefix stripping
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +39,8 @@ app.add_middleware(
         "http://31.44.217.0/talk4finance",
         "http://castor.iagen-ov.fr",
         "http://castor.iagen-ov.fr/talk4finance",
+        "http://localhost:8000",  # Add backend URL
+        "http://127.0.0.1:8000",  # Add backend URL
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -119,10 +121,10 @@ if os.path.exists(static_dir):
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
         print(f"✅ Mounting React static files from: {react_static_dir}")
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
+        app.mount("/talk4finance/static", StaticFiles(directory=react_static_dir), name="react_static")
     else:
         print(f"❌ React static subdirectory not found")
-        app.mount("/static", StaticFiles(directory=static_dir), name="main_static")
+        app.mount("/talk4finance/static", StaticFiles(directory=static_dir), name="main_static")
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
@@ -136,8 +138,16 @@ async def preflight_handler():
         "Access-Control-Allow-Headers": "*",
     })
 
+@app.options("/talk4finance/{rest_of_path:path}")
+async def static_options_handler(rest_of_path: str):
+    return Response(status_code=204, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,HEAD,OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    })
+
 # IMPORTANT: This catch-all route must be LAST
-@app.get("/{full_path:path}")
+@app.get("/talk4finance/{full_path:path}")
 async def serve_react_app(full_path: str):
     """
     Serve React app for all routes that don't match API endpoints or static files.
@@ -150,6 +160,12 @@ async def serve_react_app(full_path: str):
     ]):
         print(f"❌ API/Static route should not reach catch-all: {full_path}")
         return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
+    if any(full_path.endswith(suffix) for suffix in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
+        print(f"!!! NOT HTML FILE: {full_path}")
+        #asset_path = f"/Users/wassime/Desktop/Talk4Finance/frontend/build/{full_path}"
+        asset_path = f"/app/static/{full_path}"
+        return FileResponse(asset_path)
+
 
     # Serve React index.html for all other routes
     index_path = "/app/static/index.html"

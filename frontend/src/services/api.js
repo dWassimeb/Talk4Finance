@@ -3,13 +3,13 @@ import axios from 'axios';
 
 const getApiBaseUrl = () => {
   // For local development
-  if (process.env.NODE_ENV === 'development') {
+  if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     return 'http://localhost:8000';
   }
 
   // For production deployment with reverse proxy
   // Just use current origin + subpath (no port manipulation needed)
-  return `${window.location.origin}/talk4finance`;
+  return `${window.location.origin}`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -43,7 +43,7 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/talk4finance/login';
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }

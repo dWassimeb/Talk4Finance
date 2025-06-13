@@ -109,23 +109,8 @@ async def health_check():
 async def api_info():
     return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
-# CRITICAL: Mount static files FIRST, before any other routes
-static_dir = "/app/static"
-#static_dir = "/Users/wassime/Desktop/Talk4Finance/frontend/build"
-if os.path.exists(static_dir):
-    print(f"📁 Static directory found: {static_dir}")
-
-    # React puts built files in /app/static/static/ subdirectory
-    react_static_dir = os.path.join(static_dir, "static")
-    if os.path.exists(react_static_dir):
-        print(f"✅ Mounting React static files from: {react_static_dir}")
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
-    else:
-        print(f"❌ React static subdirectory not found")
-        app.mount("/static", StaticFiles(directory=static_dir), name="main_static")
-else:
-    print(f"❌ Static directory not found: {static_dir}")
-
+# Mount the entire React build directory at /talk4finance
+app.mount("/talk4finance", StaticFiles(directory="/app/static", html=True), name="talk4finance")
 
 # CORS preflight handler
 @app.options("/{rest_of_path:path}")
@@ -136,26 +121,25 @@ async def preflight_handler():
         "Access-Control-Allow-Headers": "*",
     })
 
-# IMPORTANT: This catch-all route must be LAST
-@app.get("/{full_path:path}")
+# Update the catch-all route to serve index.html for unknown routes under /talk4finance
+@app.get("/talk4finance/{full_path:path}")
 async def serve_react_app(full_path: str):
     """
     Serve React app for all routes that don't match API endpoints or static files.
     """
-    print(f"🔍 Catch-all route hit for: {full_path}")
+    print(f"🔍 Catch-all route hit for: /talk4finance/{full_path}")
 
-    # Skip API routes, docs, websockets, and static files
+    # Skip API routes, docs, websockets
     if any(full_path.startswith(prefix) for prefix in [
-        "api/", "ws/", "health", "docs", "openapi.json", "redoc", "static/"
+        "api/", "ws/", "health", "docs", "openapi.json", "redoc"
     ]):
         print(f"❌ API/Static route should not reach catch-all: {full_path}")
         return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
 
     # Serve React index.html for all other routes
     index_path = "/app/static/index.html"
-    #index_path = "/Users/wassime/Desktop/Talk4Finance/frontend/build/index.html"
     if os.path.exists(index_path):
-        print(f"✅ Serving React index.html for route: {full_path}")
+        print(f"✅ Serving React index.html for route: /talk4finance/{full_path}")
         return FileResponse(index_path)
     else:
         print(f"❌ React index.html not found at: {index_path}")

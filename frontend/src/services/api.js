@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
 
   // For production deployment with reverse proxy
   // Just use current origin + subpath (no port manipulation needed)
-  return `${window.location.origin}`;
+  return `${window.location.origin}/talk4finance`;
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -43,7 +43,7 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
-      window.location.href = '/login';
+      window.location.href = '/talk4finance/login';
     }
     return Promise.reject(error);
   }

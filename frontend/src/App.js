@@ -1,4 +1,4 @@
-// frontend/src/App.jsx
+// frontend/src/App.js - SIMPLE FIX
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -13,7 +13,7 @@ function App() {
   return (
     <AuthProvider>
       <ChatProvider>
-        <Router>
+        <Router basename="/talk4finance">
           <div className="App">
             <Routes>
               <Route path="/login" element={<Login />} />

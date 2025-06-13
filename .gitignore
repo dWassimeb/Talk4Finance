@@ -4,7 +4,7 @@ __pycache__/
 *.pyc
 
 # Environment files (you mentioned you don't have these, but good to exclude if created)
-.env
+
 backend/venv
 
 # Node.js (if you have frontend)

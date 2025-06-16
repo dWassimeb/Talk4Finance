@@ -1,4 +1,4 @@
-// frontend/src/context/AuthContext.js - IMPROVED
+// frontend/src/context/AuthContext.js - MINIMAL FIX (keep your original design)
 import React, { createContext, useState, useEffect } from 'react';
 import { authService } from '../services/auth';
 
@@ -15,8 +15,7 @@ export const AuthProvider = ({ children }) => {
         .then(userData => {
           setUser(userData);
         })
-        .catch((error) => {
-          console.error('Failed to get current user:', error);
+        .catch(() => {
           localStorage.removeItem('token');
         })
         .finally(() => {
@@ -35,11 +34,14 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return { success: true };
     } catch (error) {
-      console.error('Login error:', error);
-      return {
-        success: false,
-        error: error.message || 'Login failed. Please check your credentials.'
-      };
+      // ONLY CHANGE: Better error message extraction
+      let errorMessage = 'Login failed. Please try again.';
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      return { success: false, error: errorMessage };
     }
   };
 
@@ -48,11 +50,14 @@ export const AuthProvider = ({ children }) => {
       await authService.register(email, username, password);
       return await login(email, password);
     } catch (error) {
-      console.error('Registration error:', error);
-      return {
-        success: false,
-        error: error.message || 'Registration failed. Please try again.'
-      };
+      // ONLY CHANGE: Better error message extraction
+      let errorMessage = 'Registration failed. Please try again.';
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      return { success: false, error: errorMessage };
     }
   };
 

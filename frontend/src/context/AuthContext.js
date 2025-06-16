@@ -1,4 +1,4 @@
-// frontend/src/context/AuthContext.js - MINIMAL FIX (keep your original design)
+// frontend/src/context/AuthContext.jsx
 import React, { createContext, useState, useEffect } from 'react';
 import { authService } from '../services/auth';
 
@@ -34,14 +34,7 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return { success: true };
     } catch (error) {
-      // ONLY CHANGE: Better error message extraction
-      let errorMessage = 'Login failed. Please try again.';
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      return { success: false, error: errorMessage };
+      return { success: false, error: error.message };
     }
   };
 
@@ -50,14 +43,7 @@ export const AuthProvider = ({ children }) => {
       await authService.register(email, username, password);
       return await login(email, password);
     } catch (error) {
-      // ONLY CHANGE: Better error message extraction
-      let errorMessage = 'Registration failed. Please try again.';
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      return { success: false, error: errorMessage };
+      return { success: false, error: error.message };
     }
   };
 

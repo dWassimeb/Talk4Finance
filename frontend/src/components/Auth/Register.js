@@ -1,4 +1,4 @@
-// frontend/src/components/Auth/Register.js - ONLY ERROR PERSISTENCE FIX
+// frontend/src/components/Auth/Register.jsx
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -43,15 +43,11 @@ const Register = () => {
       ...formData,
       [e.target.name]: e.target.value
     });
-    // ONLY CHANGE: Clear error when user starts typing (prevents quick disappear)
-    if (error) {
-      setError('');
-    }
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-cyan-50 flex items-center justify-center px-4 relative overflow-hidden">
-      {/* Background Elements - YOUR ORIGINAL DESIGN */}
+      {/* Background Elements */}
       <div className="absolute inset-0">
         <div className="absolute top-20 left-20 w-72 h-72 bg-gradient-to-r from-[#00ACB5]/20 to-[#00929A]/20 rounded-full blur-3xl"></div>
         <div className="absolute bottom-20 right-20 w-96 h-96 bg-gradient-to-r from-blue-400/20 to-cyan-400/20 rounded-full blur-3xl"></div>
@@ -59,9 +55,9 @@ const Register = () => {
       </div>
 
       <div className="relative max-w-md w-full">
-        {/* Main Card - YOUR ORIGINAL DESIGN */}
+        {/* Main Card */}
         <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8">
-          {/* Header - YOUR ORIGINAL DESIGN WITH Talk4Finance */}
+          {/* Header */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-2xl flex items-center justify-center mx-auto mb-6 relative">
               <Bot className="w-8 h-8 text-white" />
@@ -79,7 +75,6 @@ const Register = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* ONLY CHANGE: Made error display persistent until user types */}
             {error && (
               <div className="bg-red-50/80 backdrop-blur-sm border border-red-200/50 text-red-700 px-4 py-3 rounded-2xl">
                 {error}
@@ -99,7 +94,7 @@ const Register = () => {
                     value={formData.email}
                     onChange={handleChange}
                     required
-                    className="w-full pl-12 pr-4 py-4 bg-white/70 backdrop-blur-sm border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent transition-all duration-200"
+                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
                     placeholder="Enter your email"
                   />
                 </div>
@@ -117,7 +112,7 @@ const Register = () => {
                     value={formData.username}
                     onChange={handleChange}
                     required
-                    className="w-full pl-12 pr-4 py-4 bg-white/70 backdrop-blur-sm border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent transition-all duration-200"
+                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
                     placeholder="Choose a username"
                   />
                 </div>
@@ -135,7 +130,7 @@ const Register = () => {
                     value={formData.password}
                     onChange={handleChange}
                     required
-                    className="w-full pl-12 pr-4 py-4 bg-white/70 backdrop-blur-sm border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent transition-all duration-200"
+                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
                     placeholder="Enter your password"
                   />
                 </div>
@@ -153,7 +148,7 @@ const Register = () => {
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     required
-                    className="w-full pl-12 pr-4 py-4 bg-white/70 backdrop-blur-sm border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent transition-all duration-200"
+                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
                     placeholder="Confirm your password"
                   />
                 </div>
@@ -163,20 +158,25 @@ const Register = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-gradient-to-r from-[#00ACB5] to-[#00929A] hover:from-[#00929A] hover:to-[#007A82] disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] disabled:scale-100 shadow-lg hover:shadow-xl"
+              className="relative w-full bg-gradient-to-r from-[#00ACB5] to-[#00929A] hover:from-[#00929A] hover:to-[#007A80] disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none group"
             >
-              {loading ? (
-                <div className="flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span className="ml-2">Creating account...</span>
-                </div>
-              ) : (
-                'Create Account'
+              <span className="relative z-10">
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Creating account...
+                  </div>
+                ) : (
+                  'Create Account'
+                )}
+              </span>
+              {!loading && (
+                <div className="absolute -inset-1 bg-gradient-to-r from-[#00ACB5] to-[#00929A] rounded-2xl blur opacity-25 group-hover:opacity-40 transition-opacity"></div>
               )}
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-8 text-center">
             <p className="text-gray-600">
               Already have an account?{' '}
               <Link
@@ -189,7 +189,7 @@ const Register = () => {
           </div>
         </div>
 
-        {/* Features - YOUR ORIGINAL DESIGN */}
+        {/* Features */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-white/20 text-center">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-lg flex items-center justify-center mx-auto mb-2">

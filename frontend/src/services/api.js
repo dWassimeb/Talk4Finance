@@ -1,10 +1,14 @@
-// frontend/src/services/api.js - IMPROVED ERROR HANDLING
+// frontend/src/services/api.js - SIMPLE FIX
 import axios from 'axios';
 
 const getApiBaseUrl = () => {
+  // For local development
   if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     return 'http://localhost:8000';
   }
+
+  // For production deployment with reverse proxy
+  // Just use current origin + subpath (no port manipulation needed)
   return `${window.location.origin}/talk4finance`;
 };
 
@@ -37,42 +41,11 @@ api.interceptors.response.use(
   (error) => {
     console.error('API Error:', error.response || error.message);
 
-    // Extract detailed error message from response
-    let errorMessage = 'An unexpected error occurred';
-
-    if (error.response) {
-      // Server responded with error status
-      if (error.response.data?.detail) {
-        // FastAPI sends errors in 'detail' field
-        errorMessage = error.response.data.detail;
-      } else if (error.response.data?.message) {
-        // Alternative error message field
-        errorMessage = error.response.data.message;
-      } else if (typeof error.response.data === 'string') {
-        errorMessage = error.response.data;
-      } else {
-        // Fallback to status text
-        errorMessage = `${error.response.status}: ${error.response.statusText}`;
-      }
-    } else if (error.request) {
-      // Network error
-      errorMessage = 'Network error - please check your connection';
-    } else {
-      // Other error
-      errorMessage = error.message;
-    }
-
-    // Create enhanced error object
-    const enhancedError = new Error(errorMessage);
-    enhancedError.originalError = error;
-    enhancedError.status = error.response?.status;
-
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       window.location.href = '/talk4finance/login';
     }
-
-    return Promise.reject(enhancedError);
+    return Promise.reject(error);
   }
 );
 

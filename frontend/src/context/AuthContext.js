@@ -1,4 +1,4 @@
-// frontend/src/context/AuthContext.jsx
+// frontend/src/context/AuthContext.js - IMPROVED
 import React, { createContext, useState, useEffect } from 'react';
 import { authService } from '../services/auth';
 
@@ -15,7 +15,8 @@ export const AuthProvider = ({ children }) => {
         .then(userData => {
           setUser(userData);
         })
-        .catch(() => {
+        .catch((error) => {
+          console.error('Failed to get current user:', error);
           localStorage.removeItem('token');
         })
         .finally(() => {
@@ -34,7 +35,11 @@ export const AuthProvider = ({ children }) => {
       setUser(userData);
       return { success: true };
     } catch (error) {
-      return { success: false, error: error.message };
+      console.error('Login error:', error);
+      return {
+        success: false,
+        error: error.message || 'Login failed. Please check your credentials.'
+      };
     }
   };
 
@@ -43,7 +48,11 @@ export const AuthProvider = ({ children }) => {
       await authService.register(email, username, password);
       return await login(email, password);
     } catch (error) {
-      return { success: false, error: error.message };
+      console.error('Registration error:', error);
+      return {
+        success: false,
+        error: error.message || 'Registration failed. Please try again.'
+      };
     }
   };
 

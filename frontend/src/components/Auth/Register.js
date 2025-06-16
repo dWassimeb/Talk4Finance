@@ -1,8 +1,8 @@
-// frontend/src/components/Auth/Register.jsx
+// frontend/src/components/Auth/Register.js - IMPROVED ERROR HANDLING
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Bot, Lock, Mail, User, Sparkles } from 'lucide-react';
+import { Bot, Lock, Mail, User, Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -21,8 +21,15 @@ const Register = () => {
     setLoading(true);
     setError('');
 
+    // Client-side validation
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
       setLoading(false);
       return;
     }
@@ -32,7 +39,7 @@ const Register = () => {
     if (result.success) {
       navigate('/chat');
     } else {
-      setError(result.error);
+      setError(result.error || 'Registration failed. Please try again.');
     }
 
     setLoading(false);
@@ -43,6 +50,31 @@ const Register = () => {
       ...formData,
       [e.target.name]: e.target.value
     });
+    // Clear error when user starts typing
+    if (error) {
+      setError('');
+    }
+  };
+
+  // Password validation feedback
+  const getPasswordValidation = () => {
+    const password = formData.password;
+    const confirmPassword = formData.confirmPassword;
+
+    const validations = [
+      {
+        test: password.length >= 6,
+        message: 'At least 6 characters',
+        field: 'password'
+      },
+      {
+        test: confirmPassword === '' || password === confirmPassword,
+        message: 'Passwords match',
+        field: 'confirm'
+      }
+    ];
+
+    return validations;
   };
 
   return (
@@ -56,160 +88,138 @@ const Register = () => {
 
       <div className="relative max-w-md w-full">
         {/* Main Card */}
-        <div className="bg-white/80 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 p-8">
+        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-2xl flex items-center justify-center mx-auto mb-6 relative">
-              <Bot className="w-8 h-8 text-white" />
-              <div className="absolute -inset-1 bg-gradient-to-r from-[#00ACB5] to-[#00929A] rounded-2xl blur opacity-25 animate-pulse"></div>
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-[#00ACB5] to-[#00929A] rounded-xl mb-4">
+              <Bot className="h-8 w-8 text-white" />
             </div>
-
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-[#00ACB5] to-[#00929A] bg-clip-text text-transparent mb-2">
-              Talk4Finance
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">
+              Create Account
             </h1>
-            <p className="text-gray-600 mb-2">Create Your Account</p>
-            <div className="flex items-center justify-center space-x-1 text-sm text-gray-500">
-              <Sparkles className="w-4 h-4" />
-              <span>Join the Future of Finance</span>
-            </div>
+            <p className="text-gray-600 mt-2">Join FinSight to start analyzing your data</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
-              <div className="bg-red-50/80 backdrop-blur-sm border border-red-200/50 text-red-700 px-4 py-3 rounded-2xl">
-                {error}
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
+                <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                <div className="text-red-700 text-sm">
+                  {error}
+                </div>
               </div>
             )}
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="Enter your email"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Username
-                </label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="Choose a username"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="Enter your password"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="Confirm your password"
-                  />
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent"
+                  placeholder="Enter your email"
+                />
               </div>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Username
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="text"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent"
+                  placeholder="Choose a username"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="password"
+                  name="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent"
+                  placeholder="Enter your password"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Confirm Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={formData.confirmPassword}
+                  onChange={handleChange}
+                  required
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent"
+                  placeholder="Confirm your password"
+                />
+              </div>
+            </div>
+
+            {/* Password validation indicators */}
+            {(formData.password || formData.confirmPassword) && (
+              <div className="space-y-2">
+                {getPasswordValidation().map((validation, index) => (
+                  <div key={index} className="flex items-center space-x-2 text-sm">
+                    {validation.test ? (
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4 text-gray-400" />
+                    )}
+                    <span className={validation.test ? 'text-green-600' : 'text-gray-500'}>
+                      {validation.message}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <button
               type="submit"
               disabled={loading}
-              className="relative w-full bg-gradient-to-r from-[#00ACB5] to-[#00929A] hover:from-[#00929A] hover:to-[#007A80] disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none group"
+              className="w-full bg-[#00ACB5] hover:bg-[#00929A] disabled:bg-[#7DD3DA] text-white font-medium py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center"
             >
-              <span className="relative z-10">
-                {loading ? (
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Creating account...
-                  </div>
-                ) : (
-                  'Create Account'
-                )}
-              </span>
-              {!loading && (
-                <div className="absolute -inset-1 bg-gradient-to-r from-[#00ACB5] to-[#00929A] rounded-2xl blur opacity-25 group-hover:opacity-40 transition-opacity"></div>
+              {loading ? (
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+              ) : (
+                'Create Account'
               )}
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          <div className="mt-6 text-center">
             <p className="text-gray-600">
               Already have an account?{' '}
-              <Link
-                to="/login"
-                className="text-[#00ACB5] hover:text-[#00929A] font-medium transition-colors duration-200"
-              >
-                Sign in here
+              <Link to="/login" className="text-[#00ACB5] hover:text-[#00929A] font-medium">
+                Sign in
               </Link>
             </p>
-          </div>
-        </div>
-
-        {/* Features */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-white/20 text-center">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500/20 to-cyan-500/20 rounded-lg flex items-center justify-center mx-auto mb-2">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-            </div>
-            <p className="text-xs text-gray-600">AI-Powered Analysis</p>
-          </div>
-
-          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-white/20 text-center">
-            <div className="w-8 h-8 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-lg flex items-center justify-center mx-auto mb-2">
-              <Bot className="w-4 h-4 text-emerald-600" />
-            </div>
-            <p className="text-xs text-gray-600">Smart Insights</p>
-          </div>
-
-          <div className="bg-white/60 backdrop-blur-sm rounded-xl p-3 border border-white/20 text-center">
-            <div className="w-8 h-8 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-lg flex items-center justify-center mx-auto mb-2">
-              <Lock className="w-4 h-4 text-purple-600" />
-            </div>
-            <p className="text-xs text-gray-600">Secure & Private</p>
           </div>
         </div>
       </div>

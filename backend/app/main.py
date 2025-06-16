@@ -1,6 +1,7 @@
-# backend/app/main.py - FIXED FOR DOUBLE SLASH ISSUE
+# backend/app/main.py - FIXED VERSION WITHOUT ROOT_PATH
 """
 FastAPI main application for PowerBI Agent
+Fixed to work with nginx prefix stripping
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,7 +20,7 @@ from app.database.connection import init_db
 from app.chat.services import ChatService
 from app.core.config import settings
 
-# Initialize FastAPI app
+# Initialize FastAPI app WITHOUT root_path (nginx will strip the prefix)
 app = FastAPI(
     title="PowerBI Agent API",
     description="Natural language interface to PowerBI datasets",
@@ -38,15 +39,15 @@ app.add_middleware(
         "http://31.44.217.0/talk4finance",
         "http://castor.iagen-ov.fr",
         "http://castor.iagen-ov.fr/talk4finance",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
+        "http://localhost:8000",  # Add backend URL
+        "http://127.0.0.1:8000",  # Add backend URL
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Include API routers (with proper prefix handling)
+# Include API routers
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 
@@ -73,7 +74,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# WebSocket endpoints (handle both single and double slash)
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await manager.connect(websocket, user_id)
@@ -87,40 +87,15 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             conversation_id = message_data.get("conversation_id")
 
             if question:
-                await manager.send_message(user_id, {
-                    "type": "typing",
-                    "typing": True
-                })
-
+                await manager.send_message(user_id, {"type": "typing", "typing": True})
                 try:
-                    # Process message with chat service
                     response = await chat_service.process_message(
-                        question,
-                        conversation_id,
-                        user_id
+                        user_id=user_id, message=question, conversation_id=conversation_id
                     )
-
-                    await manager.send_message(user_id, {
-                        "type": "response",
-                        "message": response["message"],
-                        "conversation_id": response["conversation_id"]
-                    })
-
+                    await manager.send_message(user_id, {"type": "message", "response": response, "typing": False})
                 except Exception as e:
-                    await manager.send_message(user_id, {
-                        "type": "error",
-                        "message": f"Error processing message: {str(e)}"
-                    })
-                finally:
-                    await manager.send_message(user_id, {
-                        "type": "typing",
-                        "typing": False
-                    })
-
+                    await manager.send_message(user_id, {"type": "error", "error": f"Error: {str(e)}", "typing": False})
     except WebSocketDisconnect:
-        manager.disconnect(user_id)
-    except Exception as e:
-        print(f"WebSocket error: {e}")
         manager.disconnect(user_id)
 
 # Handle double slash WebSocket too
@@ -128,12 +103,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 async def websocket_endpoint_double_slash(websocket: WebSocket, user_id: str):
     return await websocket_endpoint(websocket, user_id)
 
-# Initialize database
 @app.on_event("startup")
 async def startup_event():
-    init_db()
+    """Initialize database on startup"""
+    print("🚀 Starting up Talk4Finance API...")
+    await init_db()
+    print("✅ Database initialized successfully")
 
-# Health check endpoints (handle both patterns)
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "Talk4Finance API"}
@@ -142,7 +119,7 @@ async def health_check():
 async def health_check_double_slash():
     return {"status": "healthy", "service": "Talk4Finance API"}
 
-# API info endpoints
+# API info endpoint
 @app.get("/api")
 async def api_info():
     return {"message": "PowerBI Agent API", "version": "1.0.0"}
@@ -151,11 +128,13 @@ async def api_info():
 async def api_info_double_slash():
     return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
-# Mount static files
+# CRITICAL: Mount static files FIRST, before any other routes
 static_dir = "/app/static"
+#static_dir = "/Users/wassime/Desktop/Talk4Finance/frontend/build"
 if os.path.exists(static_dir):
     print(f"📁 Static directory found: {static_dir}")
 
+    # React puts built files in /app/static/static/ subdirectory
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
         print(f"✅ Mounting React static files from: {react_static_dir}")
@@ -164,15 +143,16 @@ if os.path.exists(static_dir):
         app.mount("//static", StaticFiles(directory=react_static_dir), name="react_static_double")
     else:
         print(f"❌ React static subdirectory not found")
-        app.mount("/static", StaticFiles(directory=static_dir), name="main_static")
+        app.mount("/talk4finance/static", StaticFiles(directory=static_dir), name="main_static")
         app.mount("//static", StaticFiles(directory=static_dir), name="main_static_double")
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
-# CORS preflight handlers
+
+# CORS preflight handler
 @app.options("/{rest_of_path:path}")
 async def preflight_handler():
-    return Response(status_code=204, headers={
+    return JSONResponse(content={}, headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "*",
@@ -186,13 +166,21 @@ async def preflight_handler_double_slash():
         "Access-Control-Allow-Headers": "*",
     })
 
-# Catch-all route for React SPA (MUST BE LAST)
+@app.options("/{rest_of_path:path}")
+async def static_options_handler(rest_of_path: str):
+    return Response(status_code=204, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,HEAD,OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    })
+
+# IMPORTANT: This catch-all route must be LAST
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
     """
     Serve React app for all routes that don't match API endpoints or static files.
     """
-    print(f"🔍 Single slash catch-all route hit for: {full_path}")
+    print(f"🔍 Catch-all route hit for: {full_path}")
 
     # Skip API routes, docs, websockets, and static files
     if any(full_path.startswith(prefix) for prefix in [
@@ -200,24 +188,25 @@ async def serve_react_app(full_path: str):
     ]):
         print(f"❌ API/Static route should not reach catch-all: {full_path}")
         return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
-
-    # Handle asset files
     if any(full_path.endswith(suffix) for suffix in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
-        print(f"🔍 Asset file requested: {full_path}")
+        print(f"!!! NOT HTML FILE: {full_path}")
+        #asset_path = f"/Users/wassime/Desktop/Talk4Finance/frontend/build/{full_path}"
         asset_path = f"/app/static/{full_path}"
-        if os.path.exists(asset_path):
-            return FileResponse(asset_path)
-        else:
-            return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
+        return FileResponse(asset_path)
 
-    # Serve React index.html for SPA routing
+
+    # Serve React index.html for all other routes
     index_path = "/app/static/index.html"
+    #index_path = "/Users/wassime/Desktop/Talk4Finance/frontend/build/index.html"
     if os.path.exists(index_path):
         print(f"✅ Serving React index.html for route: {full_path}")
         return FileResponse(index_path)
     else:
         print(f"❌ React index.html not found at: {index_path}")
-        return JSONResponse(status_code=500, content={"error": "React build not found"})
+        return JSONResponse(
+            status_code=500,
+            content={"error": "React build not found", "path": index_path}
+        )
 
 # Double slash catch-all route (MUST BE AFTER SINGLE SLASH)
 @app.get("//{full_path:path}")

@@ -1,4 +1,4 @@
-// frontend/src/context/ChatContext.js - FIXED WEBSOCKET URL
+// frontend/src/context/ChatContext.js - FIXED MESSAGE HANDLING
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { chatService } from '../services/chat';
@@ -74,7 +74,6 @@ export const ChatProvider = ({ children }) => {
   const [isTyping, setIsTyping] = useState(false);
   const [ws, setWs] = useState(null);
   const [connectionError, setConnectionError] = useState(null);
-  const [hasAutoCreatedConversation, setHasAutoCreatedConversation] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
@@ -107,7 +106,7 @@ export const ChatProvider = ({ children }) => {
           if (data.type === 'typing') {
             setIsTyping(data.typing);
           } else if (data.type === 'response') {
-            // Handle new message format
+            // Handle simple response format
             setMessages(prev => [...prev, {
               id: Date.now(),
               content: data.message,
@@ -119,7 +118,6 @@ export const ChatProvider = ({ children }) => {
           } else if (data.type === 'error') {
             setIsTyping(false);
             console.error('Chat error:', data.message);
-            // Show error message to user
             setMessages(prev => [...prev, {
               id: Date.now(),
               content: `Error: ${data.message}`,

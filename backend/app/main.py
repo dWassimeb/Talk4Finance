@@ -80,7 +80,6 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# WebSocket endpoints (handle both single and double slash)
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     print(f"🔌 WebSocket connection attempt for user {user_id}")
@@ -104,21 +103,23 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                     })
 
                     try:
-                        # For now, send a simple echo response
-                        # TODO: Replace with actual PowerBI agent processing
-                        response_message = f"I received your message: '{question}'. The PowerBI integration is being set up."
+                        # Direct agent response - replace with actual PowerBI agent when ready
+                        await asyncio.sleep(1)  # Brief thinking time
+
+                        # This is where the PowerBI agent would process the query
+                        # For now, just a placeholder until PowerBI integration is complete
+                        response_message = "I'm ready to help with your financial analysis."
 
                         await manager.send_message(user_id, {
                             "type": "response",
-                            "message": response_message,
-                            "conversation_id": conversation_id
+                            "message": response_message
                         })
 
                     except Exception as e:
                         print(f"❌ Error processing message: {e}")
                         await manager.send_message(user_id, {
                             "type": "error",
-                            "message": f"Sorry, I encountered an error: {str(e)}"
+                            "message": f"I encountered an error: {str(e)}"
                         })
                     finally:
                         await manager.send_message(user_id, {

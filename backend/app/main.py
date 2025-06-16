@@ -1,7 +1,7 @@
-# backend/app/main.py - FIXED VERSION WITHOUT ROOT_PATH
+# backend/app/main.py - FOR proxy_pass http://10.8.20.232:3001/
 """
 FastAPI main application for PowerBI Agent
-Fixed to work with nginx prefix stripping
+For nginx config: proxy_pass http://10.8.20.232:3001/
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +20,7 @@ from app.database.connection import init_db
 from app.chat.services import ChatService
 from app.core.config import settings
 
-# Initialize FastAPI app WITHOUT root_path (nginx will strip the prefix)
+# Initialize FastAPI app
 app = FastAPI(
     title="PowerBI Agent API",
     description="Natural language interface to PowerBI datasets",
@@ -39,15 +39,15 @@ app.add_middleware(
         "http://31.44.217.0/talk4finance",
         "http://castor.iagen-ov.fr",
         "http://castor.iagen-ov.fr/talk4finance",
-        "http://localhost:8000",  # Add backend URL
-        "http://127.0.0.1:8000",  # Add backend URL
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-# Include API routers
+# Include API routers (nginx strips /talk4finance, backend gets /api/auth)
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 
@@ -70,36 +70,17 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+# WebSocket endpoint (nginx strips /talk4finance, so backend gets /ws)
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
     await manager.connect(websocket, user_id)
     chat_service = ChatService()
+    # ... websocket implementation
 
-    try:
-        while True:
-            data = await websocket.receive_text()
-            message_data = json.loads(data)
-            question = message_data.get("message", "")
-            conversation_id = message_data.get("conversation_id")
-
-            if question:
-                await manager.send_message(user_id, {"type": "typing", "typing": True})
-                try:
-                    response = await chat_service.process_message(
-                        user_id=user_id, message=question, conversation_id=conversation_id
-                    )
-                    await manager.send_message(user_id, {"type": "message", "response": response, "typing": False})
-                except Exception as e:
-                    await manager.send_message(user_id, {"type": "error", "error": f"Error: {str(e)}", "typing": False})
-    except WebSocketDisconnect:
-        manager.disconnect(user_id)
-
+# Initialize database
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database on startup"""
-    print("🚀 Starting up Talk4Finance API...")
-    await init_db()
-    print("✅ Database initialized successfully")
+    init_db()
 
 # Health check endpoint
 @app.get("/health")
@@ -111,43 +92,32 @@ async def health_check():
 async def api_info():
     return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
-# CRITICAL: Mount static files FIRST, before any other routes
+# Mount static files (nginx strips /talk4finance, backend gets /static)
 static_dir = "/app/static"
-#static_dir = "/Users/wassime/Desktop/Talk4Finance/frontend/build"
 if os.path.exists(static_dir):
     print(f"📁 Static directory found: {static_dir}")
 
-    # React puts built files in /app/static/static/ subdirectory
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
         print(f"✅ Mounting React static files from: {react_static_dir}")
-        app.mount("/talk4finance/static", StaticFiles(directory=react_static_dir), name="react_static")
+        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
     else:
         print(f"❌ React static subdirectory not found")
-        app.mount("/talk4finance/static", StaticFiles(directory=static_dir), name="main_static")
+        app.mount("/static", StaticFiles(directory=static_dir), name="main_static")
 else:
     print(f"❌ Static directory not found: {static_dir}")
-
 
 # CORS preflight handler
 @app.options("/{rest_of_path:path}")
 async def preflight_handler():
-    return JSONResponse(content={}, headers={
+    return Response(status_code=204, headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "*",
     })
 
-@app.options("/talk4finance/{rest_of_path:path}")
-async def static_options_handler(rest_of_path: str):
-    return Response(status_code=204, headers={
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,HEAD,OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-    })
-
-# IMPORTANT: This catch-all route must be LAST
-@app.get("/talk4finance/{full_path:path}")
+# Catch-all route for React SPA (nginx strips /talk4finance)
+@app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
     """
     Serve React app for all routes that don't match API endpoints or static files.
@@ -160,25 +130,24 @@ async def serve_react_app(full_path: str):
     ]):
         print(f"❌ API/Static route should not reach catch-all: {full_path}")
         return JSONResponse(status_code=404, content={"detail": f"Not found: {full_path}"})
+
+    # Handle asset files
     if any(full_path.endswith(suffix) for suffix in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
-        print(f"!!! NOT HTML FILE: {full_path}")
-        #asset_path = f"/Users/wassime/Desktop/Talk4Finance/frontend/build/{full_path}"
+        print(f"🔍 Asset file requested: {full_path}")
         asset_path = f"/app/static/{full_path}"
-        return FileResponse(asset_path)
+        if os.path.exists(asset_path):
+            return FileResponse(asset_path)
+        else:
+            return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
 
-
-    # Serve React index.html for all other routes
+    # Serve React index.html for SPA routing
     index_path = "/app/static/index.html"
-    #index_path = "/Users/wassime/Desktop/Talk4Finance/frontend/build/index.html"
     if os.path.exists(index_path):
         print(f"✅ Serving React index.html for route: {full_path}")
         return FileResponse(index_path)
     else:
         print(f"❌ React index.html not found at: {index_path}")
-        return JSONResponse(
-            status_code=500,
-            content={"error": "React build not found", "path": index_path}
-        )
+        return JSONResponse(status_code=500, content={"error": "React build not found"})
 
 if __name__ == "__main__":
     print("🚀 Starting Talk4Finance API server...")

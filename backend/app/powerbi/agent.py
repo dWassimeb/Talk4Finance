@@ -549,9 +549,10 @@ class PowerBIAgentService:
             tools=tools,
             memory=memory,
             verbose=True,
-            max_iterations=8,
+            max_iterations=12,
             handle_parsing_errors=True,
-            early_stopping_method="force",
+            #early_stopping_method="force", it forces the stoppage when reaching the max iterations, which does not allow the agent to provide a proper conclusion
+            early_stopping_method="generate",
         )
         
         return agent_executor

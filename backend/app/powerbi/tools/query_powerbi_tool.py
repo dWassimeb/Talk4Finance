@@ -190,8 +190,10 @@ Always use predefined measures like [CA], [MB], [BUDGET] instead of raw table ca
 
         return formatted_output
 
+    # Enhanced _format_results method for backend/app/powerbi/tools/query_powerbi_tool.py
+
     def _format_results(self, result: Dict[str, Any]) -> str:
-        """Format query results with proper financial formatting and Euro symbols."""
+        """Format query results with enhanced presentation for analysis."""
         if isinstance(result, dict):
             if "error" in result:
                 return f"Error executing query: {result['error']}"
@@ -207,7 +209,7 @@ Always use predefined measures like [CA], [MB], [BUDGET] instead of raw table ca
                     # Detect if it's a financial or percentage value
                     key_lower = key.lower()
                     is_percentage = (any(keyword in key_lower for keyword in ['percentage', 'pourcentage', 'percent', 'pct', '%', 'change', 'growth', 'croissance']) or
-                                   key_lower.endswith('(%)') or key_lower.endswith('%'))
+                                     key_lower.endswith('(%)') or key_lower.endswith('%'))
                     is_financial = any(keyword in key_lower for keyword in ['revenue', 'revenu', 'ca', 'margin', 'marge', 'budget', 'cost', 'coût', 'montant', 'total'])
 
                     if is_percentage:
@@ -222,17 +224,192 @@ Always use predefined measures like [CA], [MB], [BUDGET] instead of raw table ca
 
                 # Case 2: Time series data
                 if len(results) > 1 and any(
-                    any(term in col.lower() for term in ["mois", "date", "month", "year", "année"])
-                    for col in results[0].keys()
+                        any(term in col.lower() for term in ["mois", "date", "month", "year", "année"])
+                        for col in results[0].keys()
                 ):
-                    return self._format_time_series(results)
+                    return self._format_time_series_enhanced(results)
 
-                # Case 3: General table data
-                return self._format_table(results)
+                # Case 3: Business Unit comparison data (enhanced for better analysis)
+                if len(results) > 1 and any(
+                        any(term in col.lower() for term in ["bu", "business", "unit", "variance", "budget"])
+                        for col in results[0].keys()
+                ):
+                    return self._format_bu_comparison(results)
+
+                # Case 4: General table data
+                return self._format_table_enhanced(results)
 
             return "Query returned no results."
 
         return f"Query results:\n\n{str(result)}"
+
+    def _format_bu_comparison(self, results: List[Dict[str, Any]]) -> str:
+        """Enhanced formatting specifically for Business Unit comparisons."""
+        formatted_output = "Business Unit Performance Analysis:\n\n"
+
+        # Get all column names
+        columns = list(results[0].keys())
+
+        # Identify key columns
+        bu_col = None
+        revenue_cols = []
+        budget_cols = []
+        variance_cols = []
+
+        for col in columns:
+            col_lower = col.lower()
+            if 'bu' in col_lower or 'business' in col_lower:
+                bu_col = col
+            elif 'revenue' in col_lower or 'ca' in col_lower or 'revenu' in col_lower:
+                revenue_cols.append(col)
+            elif 'budget' in col_lower:
+                budget_cols.append(col)
+            elif 'variance' in col_lower or 'difference' in col_lower or 'dif' in col_lower:
+                variance_cols.append(col)
+
+        # Sort results by a key metric if available (e.g., budget variance or revenue)
+        sort_col = variance_cols[0] if variance_cols else revenue_cols[0] if revenue_cols else columns[1]
+
+        try:
+            # Sort by the metric, handling None values
+            sorted_results = sorted(results,
+                                    key=lambda x: x.get(sort_col, 0) if x.get(sort_col) is not None else 0,
+                                    reverse=True)
+        except:
+            sorted_results = results
+
+        # Format each Business Unit
+        for i, row in enumerate(sorted_results):
+            bu_name = row.get(bu_col, f"BU {i+1}")
+
+            # Skip None/empty BU names
+            if not bu_name or bu_name == "None":
+                continue
+
+            formatted_output += f"• **{bu_name}**:\n"
+
+            for col in columns:
+                if col == bu_col:
+                    continue
+
+                value = row.get(col, "N/A")
+
+                # Enhanced formatting based on column type
+                if isinstance(value, (int, float)) and value is not None:
+                    # Detect if this is a financial value
+                    col_lower = col.lower()
+                    if any(keyword in col_lower for keyword in ['revenue', 'budget', 'variance', 'ca', 'mb', 'montant']):
+                        if 'variance' in col_lower or 'dif' in col_lower:
+                            # Format variance with +/- indicator
+                            formatted_value = self._format_financial_value(value, is_percentage=False)
+                            if value > 0:
+                                formatted_value = f"+{formatted_value}"
+                        else:
+                            formatted_value = self._format_financial_value(value, is_percentage=False)
+                    else:
+                        formatted_value = f"{value:,.2f}"
+                else:
+                    formatted_value = str(value) if value is not None else "N/A"
+
+                formatted_output += f"  - {col}: {formatted_value}\n"
+
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _format_table_enhanced(self, results: List[Dict[str, Any]]) -> str:
+        """Enhanced general table formatting with better financial presentation."""
+        formatted_output = "Query Results:\n\n"
+
+        # Get all column names
+        columns = list(results[0].keys())
+
+        # Detect financial and percentage columns
+        financial_columns, percentage_columns = self._detect_financial_columns(columns)
+
+        # Format as bullet points with enhanced financial formatting
+        for i, row in enumerate(results):
+            formatted_output += f"• Row {i+1}:\n"
+            for col in columns:
+                value = row.get(col, "N/A")
+
+                if col in percentage_columns:
+                    formatted_value = self._format_financial_value(value, is_percentage=True)
+                elif col in financial_columns:
+                    formatted_value = self._format_financial_value(value, is_percentage=False)
+                    # Add +/- for variance columns
+                    if value is not None and isinstance(value, (int, float)) and 'variance' in col.lower():
+                        if value > 0:
+                            formatted_value = f"+{formatted_value}"
+                else:
+                    # Non-financial data
+                    if isinstance(value, (int, float)) and value is not None:
+                        formatted_value = f"{value:,.2f}"
+                    else:
+                        formatted_value = str(value) if value is not None else "N/A"
+
+                formatted_output += f"  - {col}: {formatted_value}\n"
+            formatted_output += "\n"
+
+        return formatted_output
+
+    def _format_time_series_enhanced(self, results: List[Dict[str, Any]]) -> str:
+        """Enhanced time series formatting with trend indicators."""
+        formatted_output = "Time Series Analysis:\n\n"
+
+        # Identify date/time column and financial columns
+        time_cols = []
+        all_columns = list(results[0].keys())
+
+        for col in all_columns:
+            col_lower = col.lower()
+            if any(term in col_lower for term in ["mois", "date", "month", "year", "année", "trimestre", "semestre", "jour", "day"]):
+                time_cols.append(col)
+
+        time_col = time_cols[0] if time_cols else all_columns[0]
+
+        # Detect financial and percentage columns
+        data_columns = [col for col in all_columns if col != time_col]
+        financial_columns, percentage_columns = self._detect_financial_columns(data_columns)
+
+        # Calculate trends if there are multiple periods
+        previous_values = {}
+
+        # Format as bullet points by time period with trend indicators
+        for i, row in enumerate(results):
+            time_value = row[time_col]
+            formatted_output += f"• {time_value}:\n"
+
+            for col in data_columns:
+                val = row.get(col)
+
+                if col in percentage_columns:
+                    formatted_value = self._format_financial_value(val, is_percentage=True)
+                elif col in financial_columns:
+                    formatted_value = self._format_financial_value(val, is_percentage=False)
+                else:
+                    # Non-financial data
+                    if isinstance(val, (int, float)) and val is not None:
+                        formatted_value = f"{val:,.2f}"
+                    else:
+                        formatted_value = str(val) if val is not None else "N/A"
+
+                # Add trend indicator for financial values
+                trend_indicator = ""
+                if col in financial_columns and val is not None and isinstance(val, (int, float)):
+                    if col in previous_values:
+                        if val > previous_values[col]:
+                            trend_indicator = " ↗️"
+                        elif val < previous_values[col]:
+                            trend_indicator = " ↘️"
+                        else:
+                            trend_indicator = " ➡️"
+                    previous_values[col] = val
+
+                formatted_output += f"  - {col}: {formatted_value}{trend_indicator}\n"
+            formatted_output += "\n"
+
+        return formatted_output
 
     def _clean_query(self, query: str) -> str:
         """Clean and prepare query string for execution."""

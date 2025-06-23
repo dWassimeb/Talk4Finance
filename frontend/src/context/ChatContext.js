@@ -1,9 +1,54 @@
-// frontend/src/context/ChatContext.jsx
+// frontend/src/context/ChatContext.jsx - WEBSOCKET FIX FOR YOUR VERSION
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { chatService } from '../services/chat';
 import { useAuth } from '../hooks/useAuth';
 
 const ChatContext = createContext();
+
+// Add WebSocket URL detection function
+const getWebSocketUrl = (userId) => {
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+  console.log('WebSocket environment detection:');
+  console.log('- Hostname:', hostname);
+  console.log('- Port:', port);
+  console.log('- Protocol:', protocol);
+
+  // Environment 1: Local development (separate servers)
+  // Frontend on 3000, Backend on 8000
+  if (process.env.NODE_ENV === 'development' ||
+      (hostname === 'localhost' && port === '3000') ||
+      (hostname === '127.0.0.1' && port === '3000')) {
+    console.log('🔧 Using LOCAL DEVELOPMENT WebSocket');
+    return `ws://localhost:8000/ws/${userId}`;
+  }
+
+  // Environment 2: Docker Desktop (single container)
+  // Everything served from the same container on port 3001
+  if ((hostname === 'localhost' && port === '3001') ||
+      (hostname === '127.0.0.1' && port === '3001')) {
+    console.log('🐳 Using DOCKER DESKTOP WebSocket');
+    // In Docker, WebSocket should connect to the same host:port
+    return `ws://${hostname}:${port}/ws/${userId}`;
+  }
+
+  // Environment 3: DocaCloud with reverse proxy
+  // Accessing via http://castor.iagen-ov.fr/talk4finance/
+  if (hostname.includes('castor.iagen-ov.fr') ||
+      hostname.includes('iagen-ov.fr') ||
+      window.location.pathname.startsWith('/talk4finance')) {
+    console.log('☁️ Using DOCACLOUD (reverse proxy) WebSocket');
+    // Use current origin with subpath for reverse proxy
+    const wsProtocol = protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${wsProtocol}//${hostname}/talk4finance/ws/${userId}`;
+  }
+
+  // Default fallback: assume reverse proxy setup
+  console.log('🔄 Using FALLBACK WebSocket');
+  return `${protocol}//${hostname}/talk4finance/ws/${userId}`;
+};
 
 // Function to generate conversation title from message
 const generateConversationTitle = (message) => {
@@ -121,10 +166,15 @@ export const ChatProvider = ({ children }) => {
     }
   }, [user, conversations, hasAutoCreatedConversation, currentConversation]);
 
+  // UPDATED connectWebSocket function with environment detection
   const connectWebSocket = () => {
     if (!user) return;
 
-    const websocket = new WebSocket(`ws://localhost:8000/ws/${user.id}`);
+    // Use the environment-aware WebSocket URL
+    const websocketUrl = getWebSocketUrl(user.id);
+    console.log('🔌 Connecting to WebSocket:', websocketUrl);
+
+    const websocket = new WebSocket(websocketUrl);
 
     websocket.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -151,12 +201,19 @@ export const ChatProvider = ({ children }) => {
     };
 
     websocket.onopen = () => {
-      console.log('WebSocket connected');
+      console.log('✅ WebSocket connected successfully');
     };
 
-    websocket.onclose = () => {
-      console.log('WebSocket disconnected');
-      setTimeout(connectWebSocket, 3000);
+    websocket.onclose = (event) => {
+      console.log('❌ WebSocket disconnected:', event.code, event.reason);
+      setTimeout(() => {
+        console.log('🔄 Attempting to reconnect WebSocket...');
+        connectWebSocket();
+      }, 3000);
+    };
+
+    websocket.onerror = (error) => {
+      console.error('❌ WebSocket error:', error);
     };
 
     setWs(websocket);
@@ -241,6 +298,7 @@ export const ChatProvider = ({ children }) => {
       conversation_id: conversation.id
     };
 
+    console.log('📤 Sending message via WebSocket:', messageData);
     ws.send(JSON.stringify(messageData));
   };
 

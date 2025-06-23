@@ -1,4 +1,5 @@
-// frontend/src/App.js - SIMPLE FIX
+// frontend/src/App.js - FIXED FOR REVERSE PROXY
+
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
@@ -19,7 +20,8 @@ function App() {
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/chat" element={<ProtectedRoute><ChatInterface /></ProtectedRoute>} />
-              <Route path="/" element={<Navigate to="/chat" replace />} />
+              {/* FIXED: Don't auto-redirect to /chat, redirect to login if not authenticated */}
+              <Route path="/" element={<ProtectedRouteOrLogin />} />
             </Routes>
           </div>
         </Router>
@@ -30,14 +32,28 @@ function App() {
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
-  
+
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">
       <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
     </div>;
   }
-  
+
   return user ? children : <Navigate to="/login" replace />;
+}
+
+// FIXED: New component to handle root route properly
+function ProtectedRouteOrLogin() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+    </div>;
+  }
+
+  // If user is authenticated, go to chat, otherwise go to login
+  return user ? <Navigate to="/chat" replace /> : <Navigate to="/login" replace />;
 }
 
 export default App;

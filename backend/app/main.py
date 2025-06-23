@@ -1,11 +1,5 @@
-# backend/app/main.py - CORRECT 3-ENVIRONMENT SETUP
-"""
-FastAPI main application for PowerBI Agent
-Supports 3 deployment environments:
-1. Local development (separate servers)
-2. Docker Desktop (single container)
-3. DocaCloud (reverse proxy)
-"""
+# backend/app/main.py - FIXED FOR REVERSE PROXY ENVIRONMENT
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
@@ -30,7 +24,7 @@ def is_reverse_proxy_env():
         os.getenv('REVERSE_PROXY') == 'true'
 
 # Initialize FastAPI app
-# For reverse proxy environments, set root_path to handle the prefix correctly
+# CRITICAL: Set root_path for reverse proxy environments
 root_path = "/talk4finance" if is_reverse_proxy_env() else None
 
 app = FastAPI(
@@ -54,7 +48,7 @@ app.add_middleware(
         "http://localhost:3001",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
-        "http://localhost:8000",  # For local backend testing
+        "http://localhost:8000",
         "http://127.0.0.1:8000",
 
         # DocaCloud production
@@ -114,7 +108,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             print(f"   - Conversation ID: {conversation_id}")
 
             if question:
-                # FIX: Use send_personal_message instead of send_message
                 await manager.send_personal_message(
                     json.dumps({"type": "typing", "typing": True}),
                     user_id
@@ -127,7 +120,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         conversation_id=conversation_id
                     )
 
-                    # FIX: Use send_personal_message instead of send_message
                     await manager.send_personal_message(
                         json.dumps({"type": "message", "response": response, "typing": False}),
                         user_id
@@ -136,7 +128,6 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                 except Exception as e:
                     print(f"❌ Error in process_message: {str(e)}")
 
-                    # FIX: Use send_personal_message instead of send_message
                     await manager.send_personal_message(
                         json.dumps({"type": "error", "error": f"Error: {str(e)}", "typing": False}),
                         user_id
@@ -229,21 +220,28 @@ async def asset_manifest():
         return FileResponse(asset_manifest_path, media_type="application/json")
     return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
 
-# Handle static files and React routing
+# Handle static files and React routing - FIXED FOR REVERSE PROXY
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str, request: Request):
     """
     Serve React app for all routes that don't match API endpoints.
-    Handles both static assets and SPA routing.
+    FIXED: Handle reverse proxy path stripping correctly
     """
     print(f"🔍 Catch-all route hit for: {full_path}")
+
+    # FIXED: Handle the double-slash issue from reverse proxy
+    # The reverse proxy strips /talk4finance and sometimes creates double slashes
+    if full_path.startswith('/'):
+        full_path = full_path[1:]  # Remove leading slash
 
     # Check if it's a static asset request
     if any(full_path.endswith(ext) for ext in ['.js', '.css', '.map', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.json']):
         print(f"🔍 Asset file requested: {full_path}")
 
-        # Clean the path - remove any prefix that might be added by reverse proxy
+        # Clean the path more aggressively for reverse proxy
         cleaned_path = full_path
+
+        # Remove any talk4finance prefix that might remain
         if cleaned_path.startswith('talk4finance/'):
             cleaned_path = cleaned_path[13:]  # Remove 'talk4finance/' prefix
 

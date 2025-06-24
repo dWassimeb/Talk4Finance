@@ -1,12 +1,12 @@
-# backend/app/main.py - MANUAL STATIC FILE HANDLING
+# backend/app/main.py - CORRECTED FOR REACT BUILD STRUCTURE
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 import json
 import os
-import mimetypes
 from typing import Dict, List
 import asyncio
 
@@ -17,8 +17,14 @@ from app.database.connection import init_db
 from app.chat.services import ChatService
 from app.core.config import settings
 
+# Detect if we're behind a reverse proxy
+def is_reverse_proxy_env():
+    """Check if we're running behind a reverse proxy (DocaCloud)"""
+    return os.getenv('HTTP_X_FORWARDED_PREFIX') == '/talk4finance' or \
+        os.getenv('REVERSE_PROXY') == 'true'
+
 # Initialize FastAPI app
-root_path = "/talk4finance" if os.getenv('REVERSE_PROXY') == 'true' else None
+root_path = "/talk4finance" if is_reverse_proxy_env() else None
 
 app = FastAPI(
     title="PowerBI Agent API",
@@ -28,6 +34,9 @@ app = FastAPI(
 )
 
 print(f"🚀 Starting FastAPI with root_path: {root_path}")
+print(f"🔍 Environment detection:")
+print(f"   - X-Forwarded-Prefix: {os.getenv('HTTP_X_FORWARDED_PREFIX', 'None')}")
+print(f"   - REVERSE_PROXY: {os.getenv('REVERSE_PROXY', 'None')}")
 
 # CORS middleware
 app.add_middleware(
@@ -38,7 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Middleware to handle double slashes
+# Simple middleware to handle double slashes from reverse proxy
 @app.middleware("http")
 async def fix_paths(request: Request, call_next):
     path = request.url.path
@@ -72,7 +81,7 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# API routes
+# Mount API routes FIRST
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 
@@ -118,54 +127,40 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
 @app.on_event("startup")
 async def startup_event():
+    print("🚀 Starting up Talk4Finance API...")
     await init_db()
+    print("✅ Database initialized successfully")
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-# MANUAL STATIC FILE HANDLING - Handle /static/* routes explicitly
-@app.get("/static/{file_path:path}")
-async def serve_static_files(file_path: str):
-    """Manually serve static files from React build"""
-    print(f"📁 Static file requested: /static/{file_path}")
+# Debug static structure
+static_dir = "/app/static"
+print(f"📁 Checking static directory: {static_dir}")
+if os.path.exists(static_dir):
+    print(f"📋 Static contents: {os.listdir(static_dir)}")
+    react_static_dir = os.path.join(static_dir, "static")
+    if os.path.exists(react_static_dir):
+        print(f"📋 Nested static contents: {os.listdir(react_static_dir)}")
 
-    # The React build puts files in: /app/static/static/
-    static_file_path = f"/app/static/static/{file_path}"
+# CORRECT MOUNTING: React expects files at /talk4finance/static/*
+# Since root_path is set to /talk4finance, we need to serve static files at /static
+if os.path.exists(static_dir):
+    # React build creates: /app/static/static/js/ and /app/static/static/css/
+    react_static_path = os.path.join(static_dir, "static")
+    if os.path.exists(react_static_path):
+        # This will serve files from /app/static/static/* at URL /static/*
+        # With root_path="/talk4finance", the full URL becomes /talk4finance/static/*
+        app.mount("/static", StaticFiles(directory=react_static_path), name="static")
+        print(f"✅ Mounted static files: /static -> {react_static_path}")
+        print(f"🌐 Static files will be accessible at: /talk4finance/static/")
+    else:
+        print(f"❌ React static subdirectory not found: {react_static_path}")
+else:
+    print(f"❌ Static directory not found: {static_dir}")
 
-    print(f"🔍 Looking for file at: {static_file_path}")
-
-    if os.path.exists(static_file_path) and os.path.isfile(static_file_path):
-        print(f"✅ Found static file: {static_file_path}")
-
-        # Determine the correct media type
-        media_type, _ = mimetypes.guess_type(static_file_path)
-        if media_type is None:
-            if file_path.endswith('.js'):
-                media_type = "application/javascript"
-            elif file_path.endswith('.css'):
-                media_type = "text/css"
-            elif file_path.endswith('.json'):
-                media_type = "application/json"
-            else:
-                media_type = "text/plain"
-
-        return FileResponse(static_file_path, media_type=media_type)
-
-    print(f"❌ Static file not found: {static_file_path}")
-
-    # Debug: Show what files are actually there
-    static_dir = "/app/static/static"
-    if os.path.exists(static_dir):
-        print(f"📋 Available files in {static_dir}:")
-        for root, dirs, files in os.walk(static_dir):
-            for file in files:
-                rel_path = os.path.relpath(os.path.join(root, file), static_dir)
-                print(f"   - {rel_path}")
-
-    return JSONResponse(status_code=404, content={"detail": f"Static file not found: {file_path}"})
-
-# Handle root-level assets
+# Handle root-level assets (favicon, manifest, etc.)
 @app.get("/favicon.ico")
 async def favicon():
     favicon_path = "/app/static/favicon.ico"
@@ -194,16 +189,12 @@ async def preflight_handler():
 async def serve_spa(full_path: str):
     print(f"🔍 Catch-all hit: {full_path}")
 
-    # This should NOT be reached for static files now
-    if full_path.startswith('static/'):
-        print(f"❌ ERROR: Static file reached catch-all! This should not happen: {full_path}")
-        return JSONResponse(status_code=500, content={"error": "Static routing failed"})
-
-    # Don't serve index.html for API routes
-    if any(full_path.startswith(prefix) for prefix in ["api/", "ws/"]):
+    # Don't serve index.html for API routes or static files
+    if any(full_path.startswith(prefix) for prefix in ["api/", "static/", "ws/"]):
+        print(f"❌ Should not reach catch-all: {full_path}")
         return JSONResponse(status_code=404, content={"detail": "Not found"})
 
-    # Serve index.html for all React routes
+    # Serve index.html for all React routes (login, chat, register, etc.)
     index_path = "/app/static/index.html"
     if os.path.exists(index_path):
         print(f"✅ Serving React index.html for: {full_path}")

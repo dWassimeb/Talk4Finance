@@ -1,4 +1,4 @@
-# backend/app/main.py - FIXED API ROUTE ORDER AND PATH HANDLING
+# backend/app/main.py - FIXED FOR REVERSE PROXY ENVIRONMENT
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,35 +42,29 @@ print(f"   - REVERSE_PROXY: {os.getenv('REVERSE_PROXY', 'None')}")
 # CORS middleware - Allow all necessary origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all for reverse proxy
+    allow_origins=[
+        # Local development
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+
+        # DocaCloud production
+        "http://castor.iagen-ov.fr",
+        "http://castor.iagen-ov.fr/talk4finance",
+        "https://castor.iagen-ov.fr",
+        "https://castor.iagen-ov.fr/talk4finance",
+
+        # Additional IPs if needed
+        "http://31.44.217.0",
+        "http://31.44.217.0/talk4finance",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
-
-# ADD MIDDLEWARE TO HANDLE DOUBLE SLASHES FROM REVERSE PROXY
-@app.middleware("http")
-async def fix_double_slashes(request: Request, call_next):
-    """Fix double slashes caused by reverse proxy path stripping"""
-    # Get the original path
-    path = request.url.path
-
-    # Fix double slashes
-    if path.startswith('//'):
-        # Remove the extra leading slash
-        fixed_path = path[1:]
-        print(f"🔧 Fixed double slash: {path} -> {fixed_path}")
-
-        # Create a new scope with the fixed path
-        scope = request.scope.copy()
-        scope["path"] = fixed_path
-        scope["raw_path"] = fixed_path.encode()
-
-        # Create a new request with the fixed scope
-        request = Request(scope, request.receive)
-
-    response = await call_next(request)
-    return response
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -91,15 +85,13 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# CRITICAL: Include API routers FIRST before any static file mounting
-print("📡 Mounting API routes...")
+# Include API routers
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(chat_router, prefix="/api/chat", tags=["Chat"])
 
 # WebSocket endpoint for real-time chat
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    print(f"🔌 WebSocket connection attempt for user: {user_id}")
     await manager.connect(websocket, user_id)
     chat_service = ChatService()
 
@@ -162,20 +154,23 @@ async def api_info():
     return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
 # Debug endpoint
-@app.get("/debug/routes")
-async def debug_routes():
-    """Debug endpoint to see all registered routes"""
-    routes = []
-    for route in app.routes:
-        if hasattr(route, 'path'):
-            routes.append({
-                "path": route.path,
-                "methods": getattr(route, 'methods', []),
-                "name": getattr(route, 'name', 'N/A')
-            })
-    return {"routes": routes}
+@app.get("/debug/static")
+async def debug_static_files():
+    """Debug endpoint to see static file structure"""
+    debug_info = {
+        "static_dir_exists": os.path.exists("/app/static"),
+        "environment": "reverse_proxy" if is_reverse_proxy_env() else "direct",
+        "root_path": app.root_path
+    }
 
-# STATIC FILE MOUNTING - AFTER API ROUTES
+    if os.path.exists("/app/static"):
+        debug_info["static_contents"] = os.listdir("/app/static")
+        if os.path.exists("/app/static/static"):
+            debug_info["nested_static_contents"] = os.listdir("/app/static/static")
+
+    return debug_info
+
+# STATIC FILE MOUNTING
 static_dir = "/app/static"
 if os.path.exists(static_dir):
     print(f"📁 Static directory found: {static_dir}")
@@ -185,6 +180,9 @@ if os.path.exists(static_dir):
     if os.path.exists(react_static_dir):
         print(f"✅ Mounting React static files from: {react_static_dir}")
         app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
+
+    # Mount root static for favicon, manifest, etc.
+    app.mount("/assets", StaticFiles(directory=static_dir), name="root_static")
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
@@ -197,13 +195,23 @@ async def preflight_handler():
         "Access-Control-Allow-Headers": "*",
     })
 
-# Specific asset routes
+# Specific asset routes with better path handling
 @app.get("/favicon.ico")
 async def favicon():
     favicon_path = "/app/static/favicon.ico"
+    print(f"🔍 Looking for favicon at: {favicon_path}")
     if os.path.exists(favicon_path):
+        print(f"✅ Found favicon at: {favicon_path}")
         return FileResponse(favicon_path, media_type="image/x-icon")
+    print(f"❌ Favicon not found at: {favicon_path}")
     return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+
+@app.get("/manifest.json")
+async def manifest():
+    manifest_path = "/app/static/manifest.json"
+    if os.path.exists(manifest_path):
+        return FileResponse(manifest_path, media_type="application/json")
+    return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
 
 @app.get("/asset-manifest.json")
 async def asset_manifest():
@@ -212,51 +220,64 @@ async def asset_manifest():
         return FileResponse(asset_manifest_path, media_type="application/json")
     return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
 
-# CRITICAL: This catch-all route must be LAST and should NOT catch API routes
+# Handle static files and React routing - FIXED FOR REVERSE PROXY
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str, request: Request):
     """
     Serve React app for all routes that don't match API endpoints.
-    CRITICAL: This should only be reached for non-API routes.
+    FIXED: Handle reverse proxy path stripping correctly
     """
     print(f"🔍 Catch-all route hit for: {full_path}")
 
-    # SECURITY: Never serve API routes through static handler
-    if full_path.startswith('api/'):
-        print(f"❌ API route reached catch-all handler: {full_path}")
-        return JSONResponse(status_code=404, content={"detail": "API endpoint not found"})
+    # FIXED: Handle the double-slash issue from reverse proxy
+    # The reverse proxy strips /talk4finance and sometimes creates double slashes
+    if full_path.startswith('/'):
+        full_path = full_path[1:]  # Remove leading slash
 
     # Check if it's a static asset request
     if any(full_path.endswith(ext) for ext in ['.js', '.css', '.map', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.json']):
         print(f"🔍 Asset file requested: {full_path}")
 
-        # Clean the path
+        # Clean the path more aggressively for reverse proxy
         cleaned_path = full_path
-        if cleaned_path.startswith('static/'):
-            # Try to find the asset
-            possible_paths = [
-                f"/app/static/{cleaned_path}",
-                f"/app/static/static/{cleaned_path.replace('static/', '')}",
-            ]
 
-            print(f"🔍 Trying paths: {possible_paths}")
+        # Remove any talk4finance prefix that might remain
+        if cleaned_path.startswith('talk4finance/'):
+            cleaned_path = cleaned_path[13:]  # Remove 'talk4finance/' prefix
 
-            for file_path in possible_paths:
-                if os.path.exists(file_path):
-                    print(f"✅ Found asset at: {file_path}")
+        print(f"🔧 Cleaned path: {cleaned_path}")
 
-                    # Determine media type
-                    media_type = "text/plain"
-                    if file_path.endswith('.js'):
-                        media_type = "application/javascript"
-                    elif file_path.endswith('.css'):
-                        media_type = "text/css"
-                    elif file_path.endswith('.json'):
-                        media_type = "application/json"
+        # Try different possible paths for the asset
+        possible_paths = [
+            f"/app/static/{cleaned_path}",
+            f"/app/static/static/{cleaned_path}",  # React puts assets in nested static
+        ]
 
-                    return FileResponse(file_path, media_type=media_type)
+        print(f"🔍 Trying paths: {possible_paths}")
+
+        for file_path in possible_paths:
+            if os.path.exists(file_path):
+                print(f"✅ Found asset at: {file_path}")
+                # Determine media type based on extension
+                media_type = "text/plain"
+                if file_path.endswith('.js'):
+                    media_type = "application/javascript"
+                elif file_path.endswith('.css'):
+                    media_type = "text/css"
+                elif file_path.endswith('.json'):
+                    media_type = "application/json"
+                elif file_path.endswith('.ico'):
+                    media_type = "image/x-icon"
+
+                return FileResponse(file_path, media_type=media_type)
 
         print(f"❌ Asset not found: {full_path}")
+        # Debug: Show directory contents
+        if os.path.exists("/app/static"):
+            print(f"📁 Static directory contents: {os.listdir('/app/static')}")
+            if os.path.exists("/app/static/static"):
+                print(f"📁 Nested static directory contents: {os.listdir('/app/static/static')}")
+
         return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
 
     # For all other routes, serve React index.html (SPA routing)

@@ -1,4 +1,4 @@
-# backend/app/main.py - CORRECTED FOR REACT BUILD STRUCTURE
+# backend/app/main.py - SIMPLIFIED WORKING VERSION
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,9 +34,6 @@ app = FastAPI(
 )
 
 print(f"🚀 Starting FastAPI with root_path: {root_path}")
-print(f"🔍 Environment detection:")
-print(f"   - X-Forwarded-Prefix: {os.getenv('HTTP_X_FORWARDED_PREFIX', 'None')}")
-print(f"   - REVERSE_PROXY: {os.getenv('REVERSE_PROXY', 'None')}")
 
 # CORS middleware
 app.add_middleware(
@@ -47,7 +44,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Simple middleware to handle double slashes from reverse proxy
+# Simple middleware to handle double slashes
 @app.middleware("http")
 async def fix_paths(request: Request, call_next):
     path = request.url.path
@@ -127,78 +124,42 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 Starting up Talk4Finance API...")
     await init_db()
-    print("✅ Database initialized successfully")
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
 
-# Debug static structure
+# Mount static files - React build structure
 static_dir = "/app/static"
-print(f"📁 Checking static directory: {static_dir}")
 if os.path.exists(static_dir):
-    print(f"📋 Static contents: {os.listdir(static_dir)}")
-    react_static_dir = os.path.join(static_dir, "static")
-    if os.path.exists(react_static_dir):
-        print(f"📋 Nested static contents: {os.listdir(react_static_dir)}")
-
-# CORRECT MOUNTING: React expects files at /talk4finance/static/*
-# Since root_path is set to /talk4finance, we need to serve static files at /static
-if os.path.exists(static_dir):
-    # React build creates: /app/static/static/js/ and /app/static/static/css/
+    # React creates nested static folder: /app/static/static/
     react_static_path = os.path.join(static_dir, "static")
     if os.path.exists(react_static_path):
-        # This will serve files from /app/static/static/* at URL /static/*
-        # With root_path="/talk4finance", the full URL becomes /talk4finance/static/*
+        # Mount the nested static directory to handle /static/ routes
         app.mount("/static", StaticFiles(directory=react_static_path), name="static")
-        print(f"✅ Mounted static files: /static -> {react_static_path}")
-        print(f"🌐 Static files will be accessible at: /talk4finance/static/")
-    else:
-        print(f"❌ React static subdirectory not found: {react_static_path}")
-else:
-    print(f"❌ Static directory not found: {static_dir}")
+        print(f"✅ Mounted static files from: {react_static_path}")
 
-# Handle root-level assets (favicon, manifest, etc.)
+# Handle specific files
 @app.get("/favicon.ico")
 async def favicon():
-    favicon_path = "/app/static/favicon.ico"
-    if os.path.exists(favicon_path):
-        return FileResponse(favicon_path, media_type="image/x-icon")
-    return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+    return FileResponse("/app/static/favicon.ico") if os.path.exists("/app/static/favicon.ico") else JSONResponse(status_code=404, content={})
 
 @app.get("/asset-manifest.json")
 async def asset_manifest():
-    manifest_path = "/app/static/asset-manifest.json"
-    if os.path.exists(manifest_path):
-        return FileResponse(manifest_path, media_type="application/json")
-    return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
-
-# CORS preflight
-@app.options("/{rest_of_path:path}")
-async def preflight_handler():
-    return Response(status_code=204, headers={
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-    })
+    return FileResponse("/app/static/asset-manifest.json") if os.path.exists("/app/static/asset-manifest.json") else JSONResponse(status_code=404, content={})
 
 # Catch-all for React routing - MUST BE LAST
 @app.get("/{full_path:path}")
 async def serve_spa(full_path: str):
-    print(f"🔍 Catch-all hit: {full_path}")
-
-    # Don't serve index.html for API routes or static files
-    if any(full_path.startswith(prefix) for prefix in ["api/", "static/", "ws/"]):
-        print(f"❌ Should not reach catch-all: {full_path}")
+    # Don't serve index.html for API routes or missing static files
+    if full_path.startswith('api/'):
         return JSONResponse(status_code=404, content={"detail": "Not found"})
 
-    # Serve index.html for all React routes (login, chat, register, etc.)
+    # Serve index.html for all React routes
     index_path = "/app/static/index.html"
     if os.path.exists(index_path):
-        print(f"✅ Serving React index.html for: {full_path}")
-        return FileResponse(index_path, media_type="text/html")
+        return FileResponse(index_path)
 
     return JSONResponse(status_code=404, content={"detail": "App not found"})
 

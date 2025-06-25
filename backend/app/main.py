@@ -1,6 +1,7 @@
-# backend/app/main.py - DIAGNOSTIC VERSION
+# backend/app/main.py - FINAL WORKING VERSION
 """
-Diagnostic version to identify import/dependency issues
+FastAPI main application for PowerBI Agent
+FINAL VERSION - Working static files + properly registered API routes
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,90 +12,23 @@ import json
 import os
 from typing import Dict, List
 import asyncio
-import traceback
 
-print("🔍 Starting diagnostic main.py...")
+# Import routers and dependencies
+from app.auth.routes import auth_router
+from app.chat.routes import chat_router
+from app.auth.dependencies import get_current_user
+from app.database.connection import init_db
+from app.chat.services import ChatService
+from app.core.config import settings
 
-# Test imports one by one to find issues
-print("📦 Testing imports...")
-
-try:
-    print("  - Testing database connection import...")
-    from app.database.connection import init_db
-    print("  ✅ Database connection import successful")
-except Exception as e:
-    print(f"  ❌ Database connection import failed: {e}")
-    traceback.print_exc()
-
-try:
-    print("  - Testing config import...")
-    from app.core.config import settings
-    print(f"  ✅ Config import successful - secret_key: {settings.secret_key[:10]}...")
-except Exception as e:
-    print(f"  ❌ Config import failed: {e}")
-    traceback.print_exc()
-
-try:
-    print("  - Testing auth dependencies import...")
-    from app.auth.dependencies import get_current_user
-    print("  ✅ Auth dependencies import successful")
-except Exception as e:
-    print(f"  ❌ Auth dependencies import failed: {e}")
-    traceback.print_exc()
-
-try:
-    print("  - Testing auth routes import...")
-    from app.auth.routes import auth_router
-    print("  ✅ Auth routes import successful")
-    print(f"     Auth router routes: {[route.path for route in auth_router.routes]}")
-except Exception as e:
-    print(f"  ❌ Auth routes import failed: {e}")
-    traceback.print_exc()
-    # Create a dummy router if import fails
-    from fastapi import APIRouter
-    auth_router = APIRouter()
-
-    @auth_router.post("/login")
-    async def dummy_login():
-        return {"error": "Auth router import failed"}
-
-    @auth_router.post("/register")
-    async def dummy_register():
-        return {"error": "Auth router import failed"}
-
-try:
-    print("  - Testing chat routes import...")
-    from app.chat.routes import chat_router
-    print("  ✅ Chat routes import successful")
-except Exception as e:
-    print(f"  ❌ Chat routes import failed: {e}")
-    traceback.print_exc()
-    # Create a dummy router if import fails
-    from fastapi import APIRouter
-    chat_router = APIRouter()
-
-    @chat_router.get("/conversations")
-    async def dummy_conversations():
-        return {"error": "Chat router import failed"}
-
-try:
-    print("  - Testing chat services import...")
-    from app.chat.services import ChatService
-    print("  ✅ Chat services import successful")
-except Exception as e:
-    print(f"  ❌ Chat services import failed: {e}")
-    traceback.print_exc()
-
-print("📦 All imports tested!")
-
-# Initialize FastAPI app
+# Initialize FastAPI app - NO root_path for reverse proxy
 app = FastAPI(
-    title="PowerBI Agent API - DIAGNOSTIC",
-    description="Diagnostic version to identify issues",
-    version="1.0.0-diagnostic"
+    title="PowerBI Agent API",
+    description="Natural language interface to PowerBI datasets",
+    version="1.0.0"
 )
 
-print("🚀 FastAPI app created")
+print("🚀 Starting Talk4Finance API...")
 
 # CORS middleware
 app.add_middleware(
@@ -114,40 +48,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("🔗 CORS middleware added")
+# CRITICAL: Include routers BEFORE any other routes
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
+print("✅ API routers registered")
 
-# Include API routers with detailed logging
-print("📡 Registering API routers...")
-
-try:
-    print("  - Registering auth router...")
-    app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-    print("  ✅ Auth router registered successfully")
-
-    # Log auth router routes
-    for route in auth_router.routes:
-        print(f"     📝 Auth route: {route.methods} {route.path}")
-
-except Exception as e:
-    print(f"  ❌ Auth router registration failed: {e}")
-    traceback.print_exc()
-
-try:
-    print("  - Registering chat router...")
-    app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
-    print("  ✅ Chat router registered successfully")
-
-    # Log chat router routes
-    for route in chat_router.routes:
-        print(f"     📝 Chat route: {route.methods} {route.path}")
-
-except Exception as e:
-    print(f"  ❌ Chat router registration failed: {e}")
-    traceback.print_exc()
-
-print("📡 Router registration complete!")
-
-# WebSocket manager (simplified for diagnostics)
+# WebSocket manager
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
@@ -168,104 +74,71 @@ manager = ConnectionManager()
 
 @app.websocket("/ws/{user_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    print(f"🔌 WebSocket connection attempt for user: {user_id}")
     await manager.connect(websocket, user_id)
     try:
         while True:
             data = await websocket.receive_text()
-            print(f"📨 WebSocket message received: {data[:100]}...")
+            message_data = json.loads(data)
 
-            # Simple echo for diagnostics
-            await manager.send_personal_message(f"Echo: {data}", user_id)
+            chat_service = ChatService()
+            response = await chat_service.process_message(
+                user_id=user_id,
+                message=message_data.get("message", ""),
+                conversation_id=message_data.get("conversation_id")
+            )
+
+            await manager.send_personal_message(json.dumps(response), user_id)
     except WebSocketDisconnect:
-        print(f"🔌 WebSocket disconnected for user: {user_id}")
         manager.disconnect(user_id)
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 Starting up diagnostic API...")
-    try:
-        await init_db()
-        print("✅ Database initialized successfully")
-    except Exception as e:
-        print(f"❌ Database initialization failed: {e}")
-        traceback.print_exc()
+    print("🚀 Starting up Talk4Finance API...")
+    await init_db()
+    print("✅ Database initialized successfully")
 
-# Essential routes
+# Essential routes - BEFORE static mounting
 @app.get("/health")
 async def health_check():
     print("💚 Health check called")
-    return {
-        "status": "healthy",
-        "service": "Talk4Finance API - DIAGNOSTIC",
-        "auth_router_routes": len(auth_router.routes),
-        "chat_router_routes": len(chat_router.routes)
-    }
+    return {"status": "healthy", "service": "Talk4Finance API"}
 
 @app.get("/api")
 async def api_info():
     print("📋 API info called")
-    return {
-        "message": "PowerBI Agent API - DIAGNOSTIC",
-        "version": "1.0.0-diagnostic",
-        "auth_routes": [f"{route.methods} {route.path}" for route in auth_router.routes],
-        "chat_routes": [f"{route.methods} {route.path}" for route in chat_router.routes]
-    }
+    return {"message": "PowerBI Agent API", "version": "1.0.0"}
 
-# Debug endpoint to check all registered routes
-@app.get("/debug/routes")
-async def debug_routes():
-    """Debug endpoint to see all registered routes"""
-    print("🔍 Debug routes endpoint called")
-    routes = []
-    for route in app.routes:
-        if hasattr(route, 'methods') and hasattr(route, 'path'):
-            routes.append({
-                "path": route.path,
-                "methods": list(route.methods) if route.methods else [],
-                "name": getattr(route, 'name', 'unnamed')
-            })
-
-    print(f"📊 Total routes registered: {len(routes)}")
-    return {"routes": routes, "total": len(routes)}
-
-# Test login endpoint (direct, not through router)
-@app.post("/api/auth/test-login")
-async def test_login():
-    print("🧪 Test login endpoint called")
-    return {"message": "Test login endpoint working", "status": "success"}
-
-# CORS preflight handler
+# CORS preflight handler - BEFORE static mounting
 @app.options("/{rest_of_path:path}")
 async def preflight_handler():
-    print(f"🔄 CORS preflight for: {rest_of_path}")
     return Response(status_code=204, headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "*",
     })
 
-# Static file handling (simplified)
+# STATIC FILE HANDLING - WORKING VERSION
 static_dir = "/app/static"
 
 if os.path.exists(static_dir):
     print(f"📁 Static directory found: {static_dir}")
 
+    # Mount React's nested static files (CSS/JS) at /static
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
         print(f"✅ Mounting React static files from: {react_static_dir}")
         app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
 
+    # Mount main static directory for other assets at /assets
     app.mount("/assets", StaticFiles(directory=static_dir), name="main_static")
     print(f"✅ Mounted main static directory: {static_dir}")
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
-# Specific routes for common files
+# Specific routes for common files - BEFORE catch-all
 @app.get("/favicon.ico")
 async def favicon():
     favicon_path = "/app/static/favicon.ico"
-    print(f"🔍 Favicon requested: {favicon_path}")
     if os.path.exists(favicon_path):
         return FileResponse(favicon_path, media_type="image/x-icon")
     return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
@@ -273,7 +146,6 @@ async def favicon():
 @app.get("/manifest.json")
 async def manifest():
     manifest_path = "/app/static/manifest.json"
-    print(f"🔍 Manifest requested: {manifest_path}")
     if os.path.exists(manifest_path):
         return FileResponse(manifest_path, media_type="application/json")
     return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
@@ -281,41 +153,82 @@ async def manifest():
 @app.get("/asset-manifest.json")
 async def asset_manifest():
     asset_manifest_path = "/app/static/asset-manifest.json"
-    print(f"🔍 Asset manifest requested: {asset_manifest_path}")
     if os.path.exists(asset_manifest_path):
         return FileResponse(asset_manifest_path, media_type="application/json")
     return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
 
-# Catch-all route (LAST)
+# FINAL CATCH-ALL ROUTE - MUST BE LAST
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str, request: Request):
-    """Diagnostic catch-all route"""
+    """
+    Serve React app for all unmatched routes.
+    This catches everything not handled by API routers or static mounts.
+    """
     print(f"🔍 Catch-all hit: {full_path}")
 
-    # If an API route reaches here, log it as an error
+    # If an API route reaches here, the routers failed to catch it
     if any(full_path.startswith(prefix) for prefix in ["api/", "ws/"]):
         print(f"❌ ERROR: API route reached catch-all: {full_path}")
-        print(f"   This means the API routers are not working correctly!")
-
-        # Return detailed error for diagnostics
         return JSONResponse(
-            status_code=500,
+            status_code=404,
             content={
-                "error": "API routing error",
-                "message": f"API route {full_path} reached catch-all handler",
+                "error": "API route not found",
                 "path": full_path,
-                "method": request.method,
-                "headers": dict(request.headers),
-                "debug": "Check container logs for import/registration errors"
+                "message": "This API endpoint does not exist"
             }
         )
 
-    # Handle static files (simplified)
+    # Handle static asset requests that weren't caught by mounts
     if any(full_path.endswith(ext) for ext in ['.js', '.css', '.map', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.json']):
         print(f"🔍 Static asset requested: {full_path}")
+
+        # Clean up the path
+        cleaned_path = full_path
+        if cleaned_path.startswith('/'):
+            cleaned_path = cleaned_path[1:]
+        if cleaned_path.startswith('talk4finance/'):
+            cleaned_path = cleaned_path[13:]
+
+        print(f"🔧 Cleaned path: {cleaned_path}")
+
+        # Try different possible paths for the asset
+        possible_paths = [
+            f"/app/static/{cleaned_path}",
+            f"/app/static/static/{cleaned_path}",  # React puts CSS/JS in nested static
+        ]
+
+        # If it's a static/* path, try the nested structure
+        if cleaned_path.startswith('static/'):
+            asset_path = cleaned_path[7:]  # Remove 'static/' prefix
+            possible_paths.append(f"/app/static/static/{asset_path}")
+
+        print(f"🔍 Trying asset paths: {possible_paths}")
+
+        for file_path in possible_paths:
+            if os.path.exists(file_path):
+                print(f"✅ Found asset at: {file_path}")
+
+                # Determine correct media type
+                media_type = "text/plain"
+                if file_path.endswith('.js'):
+                    media_type = "application/javascript"
+                elif file_path.endswith('.css'):
+                    media_type = "text/css"
+                elif file_path.endswith('.json'):
+                    media_type = "application/json"
+                elif file_path.endswith('.ico'):
+                    media_type = "image/x-icon"
+                elif file_path.endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                    media_type = "image/*"
+                elif file_path.endswith('.svg'):
+                    media_type = "image/svg+xml"
+
+                return FileResponse(file_path, media_type=media_type)
+
+        print(f"❌ Asset not found: {full_path}")
         return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
 
-    # Serve React index.html
+    # For all other routes, serve React index.html (SPA routing)
     index_path = "/app/static/index.html"
     if os.path.exists(index_path):
         print(f"✅ Serving React index.html for: {full_path}")
@@ -332,5 +245,4 @@ async def serve_react_app(full_path: str, request: Request):
         )
 
 if __name__ == "__main__":
-    print("🎯 Starting diagnostic server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)

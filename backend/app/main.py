@@ -204,6 +204,56 @@ async def serve_react_app(full_path: str, request: Request):
             }
         )
 
+    # Handle static asset requests that weren't caught by mounts
+    if any(full_path.endswith(ext) for ext in ['.js', '.css', '.map', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.json']):
+        print(f"🔍 Static asset requested: {full_path}")
+
+        # Clean up the path
+        cleaned_path = full_path
+        if cleaned_path.startswith('/'):
+            cleaned_path = cleaned_path[1:]
+        if cleaned_path.startswith('talk4finance/'):
+            cleaned_path = cleaned_path[13:]
+
+        print(f"🔧 Cleaned path: {cleaned_path}")
+
+        # Try different possible paths for the asset
+        possible_paths = [
+            f"/app/static/{cleaned_path}",
+            f"/app/static/static/{cleaned_path}",  # React puts CSS/JS in nested static
+        ]
+
+        # If it's a static/* path, try the nested structure
+        if cleaned_path.startswith('static/'):
+            asset_path = cleaned_path[7:]  # Remove 'static/' prefix
+            possible_paths.append(f"/app/static/static/{asset_path}")
+
+        print(f"🔍 Trying asset paths: {possible_paths}")
+
+        for file_path in possible_paths:
+            if os.path.exists(file_path):
+                print(f"✅ Found asset at: {file_path}")
+
+                # Determine correct media type
+                media_type = "text/plain"
+                if file_path.endswith('.js'):
+                    media_type = "application/javascript"
+                elif file_path.endswith('.css'):
+                    media_type = "text/css"
+                elif file_path.endswith('.json'):
+                    media_type = "application/json"
+                elif file_path.endswith('.ico'):
+                    media_type = "image/x-icon"
+                elif file_path.endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                    media_type = "image/*"
+                elif file_path.endswith('.svg'):
+                    media_type = "image/svg+xml"
+
+                return FileResponse(file_path, media_type=media_type)
+
+        print(f"❌ Asset not found: {full_path}")
+        return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
+
     # Serve React index.html for everything else
     index_path = "/app/static/index.html"
     if os.path.exists(index_path):

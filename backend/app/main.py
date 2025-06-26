@@ -1,6 +1,7 @@
-# backend/app/main.py - API ROUTES FIRST
+# backend/app/main.py - CORRECT PREFIX VERSION
 """
-Put API routes FIRST, before any static file mounting or other routes
+FastAPI main application with proper reverse proxy prefix handling
+Based on user's working solution
 """
 from fastapi import FastAPI, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,11 +24,20 @@ try:
 except Exception as e:
     print(f"❌ Auth router import failed: {e}")
 
+# Detect if we're behind a reverse proxy
+def is_reverse_proxy_env():
+    """Check if we're running behind a reverse proxy (DocaCloud)"""
+    return os.getenv('HTTP_X_FORWARDED_PREFIX') == '/talk4finance' or \
+        os.getenv('REVERSE_PROXY') == 'true'
+
+reverse_proxy = is_reverse_proxy_env()
+print(f"🔍 Reverse proxy mode: {reverse_proxy}")
+
 # Initialize FastAPI app
 app = FastAPI(
-    title="PowerBI Agent API - API FIRST",
-    description="Testing with API routes registered first",
-    version="1.0.0-api-first"
+    title="PowerBI Agent API - CORRECT PREFIX",
+    description="Proper reverse proxy prefix handling",
+    version="1.0.0-prefix-fix"
 )
 
 print("🚀 FastAPI app created")
@@ -52,95 +62,122 @@ app.add_middleware(
 
 print("🔗 CORS middleware added")
 
-# CRITICAL: Register API routes FIRST, before everything else
-print("📡 Registering API routes FIRST...")
+# Register API routes with proper prefix
+print("📡 Registering API routes...")
 
-try:
+if reverse_proxy:
+    # For reverse proxy: mount with /talk4finance prefix
+    print("🔄 Using reverse proxy mode - mounting with /talk4finance prefix")
+    app.include_router(auth_router, prefix="/talk4finance/api/auth", tags=["auth"])
+else:
+    # For direct access: mount without prefix
+    print("🔗 Using direct mode - mounting without prefix")
     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
-    print("✅ Auth router registered successfully")
 
-    # Print all auth routes for verification
-    for route in auth_router.routes:
-        methods = getattr(route, 'methods', ['UNKNOWN'])
-        path = getattr(route, 'path', 'UNKNOWN')
-        print(f"   📝 Auth route: {methods} {path}")
+print("✅ Auth router registered successfully")
 
-except Exception as e:
-    print(f"❌ Auth router registration failed: {e}")
-
-print("📡 API router registration complete!")
+# Print all auth routes for verification
+for route in auth_router.routes:
+    methods = getattr(route, 'methods', ['UNKNOWN'])
+    path = getattr(route, 'path', 'UNKNOWN')
+    print(f"   📝 Auth route: {methods} {path}")
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 Starting up API-first test...")
+    print("🚀 Starting up prefix-corrected API...")
     try:
         await init_db()
         print("✅ Database initialized successfully")
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
 
-# Essential API routes BEFORE static files
-@app.get("/health")
-async def health_check():
-    print("💚 Health check called")
-    return {
-        "status": "healthy",
-        "service": "Talk4Finance API - API FIRST",
-        "auth_router_routes": len(auth_router.routes),
-        "all_routes": len(app.routes)
-    }
+# Essential routes with proper prefix
+if reverse_proxy:
+    @app.get("/talk4finance/health")
+    async def health_check():
+        print("💚 Health check called (reverse proxy)")
+        return {
+            "status": "healthy",
+            "service": "Talk4Finance API - PREFIX FIX",
+            "mode": "reverse_proxy"
+        }
 
-@app.get("/api")
-async def api_info():
-    print("📋 API info called")
-    return {
-        "message": "PowerBI Agent API - API FIRST",
-        "version": "1.0.0-api-first",
-        "auth_routes": [
-            f"{getattr(route, 'methods', ['UNKNOWN'])} {getattr(route, 'path', 'UNKNOWN')}"
-            for route in auth_router.routes
-        ]
-    }
+    @app.get("/talk4finance/api")
+    async def api_info():
+        print("📋 API info called (reverse proxy)")
+        return {
+            "message": "PowerBI Agent API - PREFIX FIX",
+            "version": "1.0.0-prefix-fix",
+            "mode": "reverse_proxy"
+        }
 
-# Debug endpoint to check all registered routes
-@app.get("/debug/routes")
-async def debug_routes():
-    """Debug endpoint to see all registered routes"""
-    print("🔍 Debug routes endpoint called")
-    routes = []
-    for route in app.routes:
-        if hasattr(route, 'methods') and hasattr(route, 'path'):
-            routes.append({
-                "path": route.path,
-                "methods": list(route.methods) if route.methods else [],
-                "name": getattr(route, 'name', 'unnamed')
-            })
+    @app.get("/talk4finance/debug/routes")
+    async def debug_routes():
+        """Debug endpoint to see all registered routes"""
+        print("🔍 Debug routes endpoint called (reverse proxy)")
+        routes = []
+        for route in app.routes:
+            if hasattr(route, 'methods') and hasattr(route, 'path'):
+                routes.append({
+                    "path": route.path,
+                    "methods": list(route.methods) if route.methods else [],
+                    "name": getattr(route, 'name', 'unnamed')
+                })
+        return {"routes": routes, "total": len(routes)}
+else:
+    @app.get("/health")
+    async def health_check():
+        print("💚 Health check called (direct)")
+        return {
+            "status": "healthy",
+            "service": "Talk4Finance API - PREFIX FIX",
+            "mode": "direct"
+        }
 
-    print(f"📊 Total routes registered: {len(routes)}")
-    return {"routes": routes, "total": len(routes)}
+    @app.get("/api")
+    async def api_info():
+        print("📋 API info called (direct)")
+        return {
+            "message": "PowerBI Agent API - PREFIX FIX",
+            "version": "1.0.0-prefix-fix",
+            "mode": "direct"
+        }
 
-# Test endpoints to verify routing works
-@app.post("/test-direct-login")
-async def test_direct_login():
-    print("🧪 Direct test login endpoint called")
-    return {"message": "Direct login endpoint working", "status": "success"}
+    @app.get("/debug/routes")
+    async def debug_routes():
+        """Debug endpoint to see all registered routes"""
+        print("🔍 Debug routes endpoint called (direct)")
+        routes = []
+        for route in app.routes:
+            if hasattr(route, 'methods') and hasattr(route, 'path'):
+                routes.append({
+                    "path": route.path,
+                    "methods": list(route.methods) if route.methods else [],
+                    "name": getattr(route, 'name', 'unnamed')
+                })
+        return {"routes": routes, "total": len(routes)}
 
-@app.get("/test-direct-get")
-async def test_direct_get():
-    print("🧪 Direct test GET endpoint called")
-    return {"message": "Direct GET endpoint working", "status": "success"}
+# CORS preflight handler with proper prefix
+if reverse_proxy:
+    @app.options("/talk4finance/{rest_of_path:path}")
+    async def preflight_handler(rest_of_path: str):
+        print(f"🔄 CORS preflight for: /talk4finance/{rest_of_path}")
+        return Response(status_code=204, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        })
+else:
+    @app.options("/{rest_of_path:path}")
+    async def preflight_handler(rest_of_path: str):
+        print(f"🔄 CORS preflight for: {rest_of_path}")
+        return Response(status_code=204, headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        })
 
-# CORS preflight handler - BEFORE static mounting
-@app.options("/{rest_of_path:path}")
-async def preflight_handler(rest_of_path: str):
-    print(f"🔄 CORS preflight for: {rest_of_path}")
-    return Response(status_code=204, headers={
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-    })
-
-# NOW mount static files AFTER API routes are registered
+# Static file mounting with proper prefix
 print("📁 Setting up static file serving...")
 
 static_dir = "/app/static"
@@ -150,105 +187,133 @@ if os.path.exists(static_dir):
 
     react_static_dir = os.path.join(static_dir, "static")
     if os.path.exists(react_static_dir):
-        print(f"✅ Mounting React static files from: {react_static_dir}")
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
+        if reverse_proxy:
+            print(f"✅ Mounting React static files at /talk4finance/static from: {react_static_dir}")
+            app.mount("/talk4finance/static", StaticFiles(directory=react_static_dir), name="react_static")
+        else:
+            print(f"✅ Mounting React static files at /static from: {react_static_dir}")
+            app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
+    else:
+        print(f"❌ React static subdirectory not found")
+        if reverse_proxy:
+            app.mount("/talk4finance/static", StaticFiles(directory=static_dir), name="main_static")
+        else:
+            app.mount("/static", StaticFiles(directory=static_dir), name="main_static")
 
-    app.mount("/assets", StaticFiles(directory=static_dir), name="main_static")
-    print(f"✅ Mounted main static directory: {static_dir}")
+    # Also mount assets directory
+    if reverse_proxy:
+        app.mount("/talk4finance/assets", StaticFiles(directory=static_dir), name="assets_static")
+    else:
+        app.mount("/assets", StaticFiles(directory=static_dir), name="assets_static")
+
+    print(f"✅ Static file mounting complete")
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
-# Common file routes - AFTER static mounting
-@app.get("/asset-manifest.json")
-async def asset_manifest():
-    asset_manifest_path = "/app/static/asset-manifest.json"
-    print(f"🔍 Asset manifest requested: {asset_manifest_path}")
-    if os.path.exists(asset_manifest_path):
-        return FileResponse(asset_manifest_path, media_type="application/json")
-    return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
+# Common file routes with proper prefix
+if reverse_proxy:
+    @app.get("/talk4finance/asset-manifest.json")
+    async def asset_manifest():
+        asset_manifest_path = "/app/static/asset-manifest.json"
+        print(f"🔍 Asset manifest requested (reverse proxy): {asset_manifest_path}")
+        if os.path.exists(asset_manifest_path):
+            return FileResponse(asset_manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
 
-# Catch-all route MUST be absolutely last
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str, request: Request):
-    """Catch-all - ABSOLUTE LAST route"""
-    print(f"🔍 Catch-all hit: {full_path}")
+    @app.get("/talk4finance/favicon.ico")
+    async def favicon():
+        favicon_path = "/app/static/favicon.ico"
+        print(f"🔍 Favicon requested (reverse proxy): {favicon_path}")
+        if os.path.exists(favicon_path):
+            return FileResponse(favicon_path, media_type="image/x-icon")
+        return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
 
-    # If an API route reaches here, something is seriously wrong
-    if any(full_path.startswith(prefix) for prefix in ["api/"]):
-        print(f"❌ CRITICAL ERROR: API route reached catch-all: {full_path}")
-        print(f"   Method: {request.method}")
-        print(f"   Headers: {dict(request.headers)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "CRITICAL: API routing completely broken",
-                "path": full_path,
-                "method": request.method,
-                "message": "API route reached catch-all despite being registered first"
-            }
-        )
+    @app.get("/talk4finance/manifest.json")
+    async def manifest():
+        manifest_path = "/app/static/manifest.json"
+        print(f"🔍 Manifest requested (reverse proxy): {manifest_path}")
+        if os.path.exists(manifest_path):
+            return FileResponse(manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+else:
+    @app.get("/asset-manifest.json")
+    async def asset_manifest():
+        asset_manifest_path = "/app/static/asset-manifest.json"
+        print(f"🔍 Asset manifest requested (direct): {asset_manifest_path}")
+        if os.path.exists(asset_manifest_path):
+            return FileResponse(asset_manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
 
-    # Handle static asset requests that weren't caught by mounts
-    if any(full_path.endswith(ext) for ext in ['.js', '.css', '.map', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.json']):
-        print(f"🔍 Static asset requested: {full_path}")
+    @app.get("/favicon.ico")
+    async def favicon():
+        favicon_path = "/app/static/favicon.ico"
+        print(f"🔍 Favicon requested (direct): {favicon_path}")
+        if os.path.exists(favicon_path):
+            return FileResponse(favicon_path, media_type="image/x-icon")
+        return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
 
-        # Clean up the path
-        cleaned_path = full_path
-        if cleaned_path.startswith('/'):
-            cleaned_path = cleaned_path[1:]
-        if cleaned_path.startswith('talk4finance/'):
-            cleaned_path = cleaned_path[13:]
+    @app.get("/manifest.json")
+    async def manifest():
+        manifest_path = "/app/static/manifest.json"
+        print(f"🔍 Manifest requested (direct): {manifest_path}")
+        if os.path.exists(manifest_path):
+            return FileResponse(manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
 
-        print(f"🔧 Cleaned path: {cleaned_path}")
+# Catch-all route with proper prefix - MUST be absolutely last
+if reverse_proxy:
+    @app.get("/talk4finance/{full_path:path}")
+    async def serve_react_app(full_path: str, request: Request):
+        """Catch-all for reverse proxy with /talk4finance prefix"""
+        print(f"🔍 Catch-all hit (reverse proxy): /talk4finance/{full_path}")
 
-        # Try different possible paths for the asset
-        possible_paths = [
-            f"/app/static/{cleaned_path}",
-            f"/app/static/static/{cleaned_path}",  # React puts CSS/JS in nested static
-        ]
+        # Handle static files as you suggested
+        if any(full_path.endswith(suffix) for suffix in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
+            print(f"!!! NOT HTML FILE: {full_path}")
+            asset_path = f"/app/static/{full_path}"
+            if os.path.exists(asset_path):
+                print(f"✅ Found asset at: {asset_path}")
+                return FileResponse(asset_path)
+            else:
+                print(f"❌ Asset not found: {asset_path}")
+                return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
 
-        # If it's a static/* path, try the nested structure
-        if cleaned_path.startswith('static/'):
-            asset_path = cleaned_path[7:]  # Remove 'static/' prefix
-            possible_paths.append(f"/app/static/static/{asset_path}")
+        # Serve React index.html for everything else
+        index_path = "/app/static/index.html"
+        if os.path.exists(index_path):
+            print(f"✅ Serving React index.html for: {full_path}")
+            return FileResponse(index_path, media_type="text/html")
+        else:
+            print(f"❌ React index.html not found")
+            return JSONResponse(status_code=404, content={"detail": "React app not found"})
+else:
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str, request: Request):
+        """Catch-all for direct access without prefix"""
+        print(f"🔍 Catch-all hit (direct): {full_path}")
 
-        print(f"🔍 Trying asset paths: {possible_paths}")
+        # Handle static files
+        if any(full_path.endswith(suffix) for suffix in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
+            print(f"!!! NOT HTML FILE: {full_path}")
+            asset_path = f"/app/static/{full_path}"
+            if os.path.exists(asset_path):
+                print(f"✅ Found asset at: {asset_path}")
+                return FileResponse(asset_path)
+            else:
+                print(f"❌ Asset not found: {asset_path}")
+                return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
 
-        for file_path in possible_paths:
-            if os.path.exists(file_path):
-                print(f"✅ Found asset at: {file_path}")
+        # Serve React index.html for everything else
+        index_path = "/app/static/index.html"
+        if os.path.exists(index_path):
+            print(f"✅ Serving React index.html for: {full_path}")
+            return FileResponse(index_path, media_type="text/html")
+        else:
+            print(f"❌ React index.html not found")
+            return JSONResponse(status_code=404, content={"detail": "React app not found"})
 
-                # Determine correct media type
-                media_type = "text/plain"
-                if file_path.endswith('.js'):
-                    media_type = "application/javascript"
-                elif file_path.endswith('.css'):
-                    media_type = "text/css"
-                elif file_path.endswith('.json'):
-                    media_type = "application/json"
-                elif file_path.endswith('.ico'):
-                    media_type = "image/x-icon"
-                elif file_path.endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                    media_type = "image/*"
-                elif file_path.endswith('.svg'):
-                    media_type = "image/svg+xml"
-
-                return FileResponse(file_path, media_type=media_type)
-
-        print(f"❌ Asset not found: {full_path}")
-        return JSONResponse(status_code=404, content={"detail": f"Asset not found: {full_path}"})
-
-    # Serve React index.html for everything else
-    index_path = "/app/static/index.html"
-    if os.path.exists(index_path):
-        print(f"✅ Serving React index.html for: {full_path}")
-        return FileResponse(index_path, media_type="text/html")
-    else:
-        print(f"❌ React index.html not found")
-        return JSONResponse(status_code=404, content={"detail": "React app not found"})
-
-print("🎯 API-first server setup complete!")
+print("🎯 Prefix-corrected server setup complete!")
 
 if __name__ == "__main__":
-    print("🎯 Starting API-first test server...")
+    print("🎯 Starting prefix-corrected server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,6 +1,6 @@
-# backend/app/main.py - MINIMAL TEST VERSION
+# backend/app/main.py - API ROUTES FIRST
 """
-Minimal test version - Remove all problematic imports to isolate the issue
+Put API routes FIRST, before any static file mounting or other routes
 """
 from fastapi import FastAPI, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,53 +9,25 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 import os
 
-# Test basic imports first
+print("🔍 Testing core imports...")
 try:
-    print("🧪 Testing core imports...")
     from app.database.connection import init_db
     print("✅ Database import OK")
 except Exception as e:
     print(f"❌ Database import failed: {e}")
 
 try:
-    from app.core.config import settings
-    print("✅ Config import OK")
-except Exception as e:
-    print(f"❌ Config import failed: {e}")
-
-try:
-    from app.auth.dependencies import get_current_user
-    print("✅ Auth dependencies import OK")
-except Exception as e:
-    print(f"❌ Auth dependencies import failed: {e}")
-
-# Try importing auth router (this should work)
-try:
     from app.auth.routes import auth_router
     print("✅ Auth router import OK")
     print(f"   Auth router has {len(auth_router.routes)} routes")
 except Exception as e:
     print(f"❌ Auth router import failed: {e}")
-    # Create dummy auth router
-    from fastapi import APIRouter
-    auth_router = APIRouter()
-
-    @auth_router.post("/login")
-    async def dummy_login():
-        return {"error": "Auth router import failed", "details": str(e)}
-
-    @auth_router.post("/register")
-    async def dummy_register():
-        return {"error": "Auth router import failed", "details": str(e)}
-
-# Skip ChatService import for now - this is likely the problem
-print("⏭️ Skipping ChatService import to test if this is the issue")
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="PowerBI Agent API - MINIMAL TEST",
-    description="Testing API routing without ChatService",
-    version="1.0.0-test"
+    title="PowerBI Agent API - API FIRST",
+    description="Testing with API routes registered first",
+    version="1.0.0-api-first"
 )
 
 print("🚀 FastAPI app created")
@@ -80,7 +52,9 @@ app.add_middleware(
 
 print("🔗 CORS middleware added")
 
-# Include ONLY auth router for testing
+# CRITICAL: Register API routes FIRST, before everything else
+print("📡 Registering API routes FIRST...")
+
 try:
     app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
     print("✅ Auth router registered successfully")
@@ -94,44 +68,39 @@ try:
 except Exception as e:
     print(f"❌ Auth router registration failed: {e}")
 
-print("📡 Router registration complete!")
+print("📡 API router registration complete!")
 
 @app.on_event("startup")
 async def startup_event():
-    print("🚀 Starting up minimal test API...")
+    print("🚀 Starting up API-first test...")
     try:
         await init_db()
         print("✅ Database initialized successfully")
     except Exception as e:
         print(f"❌ Database initialization failed: {e}")
 
-# Essential routes
+# Essential API routes BEFORE static files
 @app.get("/health")
 async def health_check():
     print("💚 Health check called")
     return {
         "status": "healthy",
-        "service": "Talk4Finance API - MINIMAL TEST",
-        "auth_router_routes": len(auth_router.routes)
+        "service": "Talk4Finance API - API FIRST",
+        "auth_router_routes": len(auth_router.routes),
+        "all_routes": len(app.routes)
     }
 
 @app.get("/api")
 async def api_info():
     print("📋 API info called")
     return {
-        "message": "PowerBI Agent API - MINIMAL TEST",
-        "version": "1.0.0-test",
+        "message": "PowerBI Agent API - API FIRST",
+        "version": "1.0.0-api-first",
         "auth_routes": [
             f"{getattr(route, 'methods', ['UNKNOWN'])} {getattr(route, 'path', 'UNKNOWN')}"
             for route in auth_router.routes
         ]
     }
-
-# Test endpoint to verify auth router is working
-@app.post("/test-direct-login")
-async def test_direct_login():
-    print("🧪 Direct test login endpoint called")
-    return {"message": "Direct login endpoint working", "status": "success"}
 
 # Debug endpoint to check all registered routes
 @app.get("/debug/routes")
@@ -150,7 +119,18 @@ async def debug_routes():
     print(f"📊 Total routes registered: {len(routes)}")
     return {"routes": routes, "total": len(routes)}
 
-# CORS preflight handler
+# Test endpoints to verify routing works
+@app.post("/test-direct-login")
+async def test_direct_login():
+    print("🧪 Direct test login endpoint called")
+    return {"message": "Direct login endpoint working", "status": "success"}
+
+@app.get("/test-direct-get")
+async def test_direct_get():
+    print("🧪 Direct test GET endpoint called")
+    return {"message": "Direct GET endpoint working", "status": "success"}
+
+# CORS preflight handler - BEFORE static mounting
 @app.options("/{rest_of_path:path}")
 async def preflight_handler(rest_of_path: str):
     print(f"🔄 CORS preflight for: {rest_of_path}")
@@ -160,7 +140,9 @@ async def preflight_handler(rest_of_path: str):
         "Access-Control-Allow-Headers": "*",
     })
 
-# Static file handling (simplified for testing)
+# NOW mount static files AFTER API routes are registered
+print("📁 Setting up static file serving...")
+
 static_dir = "/app/static"
 
 if os.path.exists(static_dir):
@@ -176,7 +158,7 @@ if os.path.exists(static_dir):
 else:
     print(f"❌ Static directory not found: {static_dir}")
 
-# Common file routes
+# Common file routes - AFTER static mounting
 @app.get("/asset-manifest.json")
 async def asset_manifest():
     asset_manifest_path = "/app/static/asset-manifest.json"
@@ -185,22 +167,24 @@ async def asset_manifest():
         return FileResponse(asset_manifest_path, media_type="application/json")
     return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
 
-# Simple catch-all (LAST)
+# Catch-all route MUST be absolutely last
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str, request: Request):
-    """Minimal catch-all for testing"""
+    """Catch-all - ABSOLUTE LAST route"""
     print(f"🔍 Catch-all hit: {full_path}")
 
-    # If an API route reaches here, the routers failed
+    # If an API route reaches here, something is seriously wrong
     if any(full_path.startswith(prefix) for prefix in ["api/"]):
-        print(f"❌ ERROR: API route reached catch-all: {full_path}")
+        print(f"❌ CRITICAL ERROR: API route reached catch-all: {full_path}")
+        print(f"   Method: {request.method}")
+        print(f"   Headers: {dict(request.headers)}")
         return JSONResponse(
             status_code=500,
             content={
-                "error": "API routing error",
+                "error": "CRITICAL: API routing completely broken",
                 "path": full_path,
                 "method": request.method,
-                "message": "API route reached catch-all - routers not working"
+                "message": "API route reached catch-all despite being registered first"
             }
         )
 
@@ -263,6 +247,8 @@ async def serve_react_app(full_path: str, request: Request):
         print(f"❌ React index.html not found")
         return JSONResponse(status_code=404, content={"detail": "React app not found"})
 
+print("🎯 API-first server setup complete!")
+
 if __name__ == "__main__":
-    print("🎯 Starting minimal test server...")
+    print("🎯 Starting API-first test server...")
     uvicorn.run(app, host="0.0.0.0", port=8000)

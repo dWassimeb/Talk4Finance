@@ -293,6 +293,36 @@ if reverse_proxy:
             print(f"❌ React index.html not found")
             return JSONResponse(status_code=404, content={"detail": "React app not found"})
 
+# Add this BEFORE the catch-all routes in main.py
+
+# Handle double slash routes (reverse proxy issue)
+if reverse_proxy:
+    # Register auth routes with double slashes for reverse proxy
+    from fastapi import APIRouter
+
+    # Create a duplicate router for double slash paths
+    double_slash_auth_router = APIRouter()
+
+    # Import the actual route functions and re-register them
+    from app.auth.routes import register, login, get_current_user_info
+
+    # Re-register with double slash paths
+    double_slash_auth_router.add_api_route("//api/auth/register", register, methods=["POST"])
+    double_slash_auth_router.add_api_route("//api/auth/login", login, methods=["POST"])
+    double_slash_auth_router.add_api_route("//api/auth/me", get_current_user_info, methods=["GET"])
+
+    app.include_router(double_slash_auth_router, tags=["auth-double-slash"])
+    print("✅ Double slash auth routes registered")
+
+    # Also register prefixed double slash routes
+    double_slash_prefixed_auth_router = APIRouter()
+    double_slash_prefixed_auth_router.add_api_route("//talk4finance/api/auth/register", register, methods=["POST"])
+    double_slash_prefixed_auth_router.add_api_route("//talk4finance/api/auth/login", login, methods=["POST"])
+    double_slash_prefixed_auth_router.add_api_route("//talk4finance/api/auth/me", get_current_user_info, methods=["GET"])
+
+    app.include_router(double_slash_prefixed_auth_router, tags=["auth-prefixed-double-slash"])
+    print("✅ Double slash prefixed auth routes registered")
+
 # Non-prefixed catch-all (lower priority)
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str, request: Request):

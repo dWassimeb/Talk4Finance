@@ -255,6 +255,37 @@ if reverse_proxy:
             "chatservice_available": CHATSERVICE_AVAILABLE
         }
 
+# Favicon routes - BOTH regular and double slash for reverse proxy
+@app.get("/favicon.ico")
+async def favicon():
+    favicon_path = "/app/static/favicon.ico"
+    if os.path.exists(favicon_path):
+        return FileResponse(favicon_path, media_type="image/x-icon")
+    return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+
+if reverse_proxy:
+    @app.get("/talk4finance/favicon.ico")
+    async def favicon_proxy():
+        favicon_path = "/app/static/favicon.ico"
+        if os.path.exists(favicon_path):
+            return FileResponse(favicon_path, media_type="image/x-icon")
+        return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+
+    # Handle double slash favicon requests
+    @app.get("//favicon.ico")
+    async def favicon_double_slash():
+        favicon_path = "/app/static/favicon.ico"
+        if os.path.exists(favicon_path):
+            return FileResponse(favicon_path, media_type="image/x-icon")
+        return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+
+    @app.get("//talk4finance/favicon.ico")
+    async def favicon_proxy_double_slash():
+        favicon_path = "/app/static/favicon.ico"
+        if os.path.exists(favicon_path):
+            return FileResponse(favicon_path, media_type="image/x-icon")
+        return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
+
 # CORS preflight
 @app.options("/{rest_of_path:path}")
 async def preflight_handler():
@@ -263,6 +294,36 @@ async def preflight_handler():
         "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
         "Access-Control-Allow-Headers": "*",
     })
+
+# Manifest routes - BOTH regular and double slash for reverse proxy
+@app.get("/manifest.json")
+async def manifest():
+    manifest_path = "/app/static/manifest.json"
+    if os.path.exists(manifest_path):
+        return FileResponse(manifest_path, media_type="application/json")
+    return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+
+if reverse_proxy:
+    @app.get("/talk4finance/manifest.json")
+    async def manifest_proxy():
+        manifest_path = "/app/static/manifest.json"
+        if os.path.exists(manifest_path):
+            return FileResponse(manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+
+    @app.get("//manifest.json")
+    async def manifest_double_slash():
+        manifest_path = "/app/static/manifest.json"
+        if os.path.exists(manifest_path):
+            return FileResponse(manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+
+    @app.get("//talk4finance/manifest.json")
+    async def manifest_proxy_double_slash():
+        manifest_path = "/app/static/manifest.json"
+        if os.path.exists(manifest_path):
+            return FileResponse(manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
 
 # Static file serving
 static_dir = "/app/static"
@@ -289,6 +350,20 @@ async def asset_manifest():
 if reverse_proxy:
     @app.get("/talk4finance/asset-manifest.json")
     async def asset_manifest_proxy():
+        asset_manifest_path = "/app/static/asset-manifest.json"
+        if os.path.exists(asset_manifest_path):
+            return FileResponse(asset_manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
+
+    @app.get("//asset-manifest.json")
+    async def asset_manifest_double_slash():
+        asset_manifest_path = "/app/static/asset-manifest.json"
+        if os.path.exists(asset_manifest_path):
+            return FileResponse(asset_manifest_path, media_type="application/json")
+        return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
+
+    @app.get("//talk4finance/asset-manifest.json")
+    async def asset_manifest_proxy_double_slash():
         asset_manifest_path = "/app/static/asset-manifest.json"
         if os.path.exists(asset_manifest_path):
             return FileResponse(asset_manifest_path, media_type="application/json")

@@ -76,6 +76,18 @@ app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
 if reverse_proxy:
     app.include_router(chat_router, prefix="/talk4finance/api/chat", tags=["chat-proxy"])
 
+    # Handle double slash chat routes (like we did for auth)
+    # Import the actual chat route functions
+    from app.chat.routes import get_conversations, create_conversation, get_conversation, delete_conversation
+
+    chat_double_slash_router = APIRouter()
+    chat_double_slash_router.add_api_route("//api/chat/conversations", get_conversations, methods=["GET"])
+    chat_double_slash_router.add_api_route("//api/chat/conversations", create_conversation, methods=["POST"])
+    chat_double_slash_router.add_api_route("//api/chat/conversations/{conversation_id}", get_conversation, methods=["GET"])
+    chat_double_slash_router.add_api_route("//api/chat/conversations/{conversation_id}", delete_conversation, methods=["DELETE"])
+    app.include_router(chat_double_slash_router, tags=["chat-double-slash"])
+    print("✅ Double slash chat routes registered")
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):

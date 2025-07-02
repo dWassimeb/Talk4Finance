@@ -1,29 +1,48 @@
 # backend/app/core/config.py
 """
-Application configuration
+Configuration settings - Fixed with algorithm setting
 """
-from pydantic_settings import BaseSettings
+import os
 from typing import Optional
 
+try:
+    from pydantic_settings import BaseSettings
+except ImportError:
+    from pydantic import BaseSettings
+
 class Settings(BaseSettings):
-    # App settings
-    app_name: str = "PowerBI Agent"
-    debug: bool = True
+    # Database - Fixed path to match your actual database location
+    database_url: str = "sqlite:///./powerbi_agent.db"
 
     # Security
     secret_key: str = "your-secret-key-change-in-production"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 30
+    algorithm: str = "HS256"  # Missing algorithm setting
+    access_token_expire_minutes: int = 1440  # 24 hours
 
-    # Database
-    database_url: str = "sqlite:///./powerbi_agent.db"
+    # PowerBI Configuration
+    powerbi_dataset_id: Optional[str] = None
+    powerbi_workspace_id: Optional[str] = None
 
-    # PowerBI settings (from your config)
-    powerbi_dataset_id: str = "b715c872-443b-42a7-b5d0-4cc9f92bd88b"
-    powerbi_workspace_id: str = "7ab6eef2-3720-409f-9dee-d5cd868c559e"
+    # GPT Configuration
+    gpt_api_key: Optional[str] = None
 
-    # OpenAI/Custom LLM
-    gpt_api_key: str = "2b24fef721d14c94a333ab2e4f686f40"
+    # Email Configuration (SMTP)
+    smtp_server: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    from_email: str = "noreply@docaposte.fr"
+
+    # Application Configuration
+    base_url: str = "http://localhost:3000"
+
+    # Admin Configuration
+    admin_email: str = "mohamed-ouassime.el-yamani@docaposte.fr"
+    allowed_domains: list = ["@docaposte.fr", "@softeam.fr"]
+
+    # Rate Limiting
+    registration_rate_limit: int = 5  # Max registrations per hour per IP
+    login_rate_limit: int = 10  # Max login attempts per hour per IP
 
     class Config:
         env_file = ".env"

@@ -1,4 +1,4 @@
-# backend/requirements.txt - FULLY TESTED VERSION
+# backend/requirements.txt - UPDATED VERSION WITH PYDANTIC-SETTINGS
 # FastAPI and web framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -12,11 +12,9 @@ python-multipart==0.0.6
 # Database
 sqlalchemy==2.0.23
 
-# Pydantic with email support
-pydantic[email]
-pydantic-settings
-
-# Email validation (explicit)
+# Pydantic with email support - UPDATED FOR V2
+pydantic==2.4.2
+pydantic-settings==2.0.3
 email-validator==2.1.0
 
 # Core dependencies from your existing project

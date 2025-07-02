@@ -8,6 +8,8 @@ import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import ChatInterface from './components/Chat/ChatInterface';
 import './styles/globals.css';
+import AdminRoute from './components/Auth/AdminRoute';
+import AdminDashboard from './components/Admin/AdminDashboard';
 
 function App() {
   return (
@@ -20,6 +22,11 @@ function App() {
               <Route path="/register" element={<Register />} />
               <Route path="/chat" element={<ProtectedRoute><ChatInterface /></ProtectedRoute>} />
               <Route path="/" element={<Navigate to="/chat" replace />} />
+              <Route path="/admin" element={
+                  <AdminRoute>
+                    <AdminDashboard />
+                  </AdminRoute>
+                } />
             </Routes>
           </div>
         </Router>

@@ -1,6 +1,7 @@
-# backend/app/main.py - REAL POWERBI VERSION
+# backend/app/main.py - COMPLETE VERSION WITH APPROVAL SYSTEM
 """
-FastAPI main application with real PowerBI ChatService integration
+FastAPI main application with PowerBI integration and approval system
+Supports 3 environments: Local, Docker, DocaCloud reverse proxy
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,7 +12,7 @@ import json
 import os
 from typing import Dict
 
-from app.auth.routes import auth_router
+from app.auth.routes import auth_router  # Import the complete router
 from app.chat.routes import chat_router
 from app.database.connection import init_db
 
@@ -32,61 +33,34 @@ def is_reverse_proxy_env():
 # Initialize FastAPI app
 app = FastAPI(
     title="PowerBI Agent API",
-    description="Natural language interface to PowerBI datasets",
+    description="Natural language interface to PowerBI datasets with approval system",
     version="1.0.0"
 )
 
-# CORS middleware
+print(f"🚀 Starting FastAPI")
+print(f"🔍 Reverse proxy detected: {is_reverse_proxy_env()}")
+
+# CORS middleware - comprehensive for all environments
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://castor.iagen-ov.fr",
-        "http://castor.iagen-ov.fr/talk4finance",
-        "https://castor.iagen-ov.fr",
-        "https://castor.iagen-ov.fr/talk4finance",
-    ],
+    allow_origins=["*"],  # Allow all origins for debugging
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 reverse_proxy = is_reverse_proxy_env()
 
-# Register auth routes (multiple paths for reverse proxy compatibility)
+# Register auth routes (includes ALL approval system routes)
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 if reverse_proxy:
     app.include_router(auth_router, prefix="/talk4finance/api/auth", tags=["auth-proxy"])
-
-    # Handle double slash routes
-    from fastapi import APIRouter
-    from app.auth.routes import register, login, get_current_user_info
-
-    double_slash_router = APIRouter()
-    double_slash_router.add_api_route("//api/auth/register", register, methods=["POST"])
-    double_slash_router.add_api_route("//api/auth/login", login, methods=["POST"])
-    double_slash_router.add_api_route("//api/auth/me", get_current_user_info, methods=["GET"])
-    app.include_router(double_slash_router, tags=["auth-double-slash"])
 
 # Register chat routes
 app.include_router(chat_router, prefix="/api/chat", tags=["chat"])
 if reverse_proxy:
     app.include_router(chat_router, prefix="/talk4finance/api/chat", tags=["chat-proxy"])
-
-    # Handle double slash chat routes (like we did for auth)
-    # Import the actual chat route functions
-    from app.chat.routes import get_conversations, create_conversation, get_conversation, delete_conversation
-
-    chat_double_slash_router = APIRouter()
-    chat_double_slash_router.add_api_route("//api/chat/conversations", get_conversations, methods=["GET"])
-    chat_double_slash_router.add_api_route("//api/chat/conversations", create_conversation, methods=["POST"])
-    chat_double_slash_router.add_api_route("//api/chat/conversations/{conversation_id}", get_conversation, methods=["GET"])
-    chat_double_slash_router.add_api_route("//api/chat/conversations/{conversation_id}", delete_conversation, methods=["DELETE"])
-    app.include_router(chat_double_slash_router, tags=["chat-double-slash"])
-    print("✅ Double slash chat routes registered")
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -101,9 +75,9 @@ class ConnectionManager:
         if user_id in self.active_connections:
             del self.active_connections[user_id]
 
-    async def send_personal_message(self, message: str, user_id: str):
+    async def send_message(self, user_id: str, message: dict):
         if user_id in self.active_connections:
-            await self.active_connections[user_id].send_text(message)
+            await self.active_connections[user_id].send_text(json.dumps(message))
 
 manager = ConnectionManager()
 
@@ -123,10 +97,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
             chat_service = None
 
     try:
-        await manager.send_personal_message(json.dumps({
+        await manager.send_message(user_id, {
             "type": "connection",
             "message": "Connected to PowerBI Agent" if chat_service else "Connected (Echo mode)"
-        }), user_id)
+        })
 
         while True:
             data = await websocket.receive_text()
@@ -138,10 +112,10 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
 
             if question:
                 # Send typing indicator
-                await manager.send_personal_message(json.dumps({
+                await manager.send_message(user_id, {
                     "type": "typing",
                     "typing": True
-                }), user_id)
+                })
 
                 try:
                     if chat_service:
@@ -160,14 +134,14 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                                 "user_message": {
                                     "id": response["user_message"]["id"],
                                     "content": question,
-                                    "is_user": True,  # ✅ CRITICAL: Mark as user message
+                                    "is_user": True,
                                     "type": "user",
                                     "created_at": response["user_message"]["created_at"]
                                 },
                                 "agent_message": {
                                     "id": response["agent_message"]["id"],
                                     "content": response["agent_message"]["content"],
-                                    "is_user": False,  # ✅ CRITICAL: Mark as agent message
+                                    "is_user": False,
                                     "type": "agent",
                                     "created_at": response["agent_message"]["created_at"]
                                 },
@@ -183,13 +157,13 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             "response": {
                                 "user_message": {
                                     "content": question,
-                                    "is_user": True,  # ✅ CRITICAL: Mark as user message
+                                    "is_user": True,
                                     "type": "user",
                                     "created_at": "2025-01-01T00:00:00Z"
                                 },
                                 "agent_message": {
                                     "content": f"Echo: {question}",
-                                    "is_user": False,  # ✅ CRITICAL: Mark as agent message
+                                    "is_user": False,
                                     "type": "agent",
                                     "created_at": "2025-01-01T00:00:00Z"
                                 },
@@ -197,7 +171,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                             }
                         }
 
-                    await manager.send_personal_message(json.dumps(websocket_response), user_id)
+                    await manager.send_message(user_id, websocket_response)
 
                 except Exception as e:
                     print(f"❌ Error processing message: {e}")
@@ -206,43 +180,43 @@ async def websocket_endpoint(websocket: WebSocket, user_id: str):
                         "response": {
                             "user_message": {
                                 "content": question,
-                                "is_user": True,  # ✅ CRITICAL: Mark as user message
+                                "is_user": True,
                                 "type": "user",
                                 "created_at": "2025-01-01T00:00:00Z"
                             },
                             "agent_message": {
                                 "content": f"I'm sorry, I encountered an error: {str(e)}",
-                                "is_user": False,  # ✅ CRITICAL: Mark as agent message
+                                "is_user": False,
                                 "type": "agent",
                                 "created_at": "2025-01-01T00:00:00Z"
                             },
                             "conversation_id": conversation_id
                         }
                     }
-                    await manager.send_personal_message(json.dumps(error_response), user_id)
+                    await manager.send_message(user_id, error_response)
 
     except WebSocketDisconnect:
         manager.disconnect(user_id)
         print(f"🔌 User {user_id} disconnected")
 
-# Double slash WebSocket for reverse proxy
+# Reverse proxy WebSocket support
 if reverse_proxy:
-    @app.websocket("//ws/{user_id}")
-    async def websocket_endpoint_double(websocket: WebSocket, user_id: str):
-        # Redirect to the main WebSocket handler
+    @app.websocket("/talk4finance/ws/{user_id}")
+    async def websocket_endpoint_proxy(websocket: WebSocket, user_id: str):
         await websocket_endpoint(websocket, user_id)
 
 @app.on_event("startup")
 async def startup_event():
+    print("🚀 Starting up Talk4Finance API...")
     await init_db()
-    print("🚀 PowerBI Agent API started")
+    print("✅ Database initialized successfully")
 
-# Health check
+# Health check endpoints
 @app.get("/health")
 async def health_check():
     return {
         "status": "healthy",
-        "service": "PowerBI Agent API",
+        "service": "Talk4Finance API with Approval System",
         "chatservice_available": CHATSERVICE_AVAILABLE
     }
 
@@ -251,11 +225,45 @@ if reverse_proxy:
     async def health_check_proxy():
         return {
             "status": "healthy",
-            "service": "PowerBI Agent API",
+            "service": "Talk4Finance API with Approval System",
             "chatservice_available": CHATSERVICE_AVAILABLE
         }
 
-# Favicon routes - BOTH regular and double slash for reverse proxy
+# API info endpoint
+@app.get("/api")
+async def api_info():
+    return {
+        "message": "PowerBI Agent API with Approval System",
+        "version": "1.0.0",
+        "features": ["authentication", "approval_system", "powerbi_integration"]
+    }
+
+# CORS preflight handler
+@app.options("/{rest_of_path:path}")
+async def preflight_handler():
+    return Response(status_code=204, headers={
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+    })
+
+# Static file serving (simplified for all environments)
+static_dir = "/app/static"
+
+if os.path.exists(static_dir):
+    # React's nested static files (CSS/JS)
+    react_static_dir = os.path.join(static_dir, "static")
+    if os.path.exists(react_static_dir):
+        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
+        if reverse_proxy:
+            app.mount("/talk4finance/static", StaticFiles(directory=react_static_dir), name="react_static_proxy")
+
+    # General assets
+    app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
+    if reverse_proxy:
+        app.mount("/talk4finance/assets", StaticFiles(directory=static_dir), name="assets_proxy")
+
+# Favicon handling
 @app.get("/favicon.ico")
 async def favicon():
     favicon_path = "/app/static/favicon.ico"
@@ -271,31 +279,7 @@ if reverse_proxy:
             return FileResponse(favicon_path, media_type="image/x-icon")
         return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
 
-    # Handle double slash favicon requests
-    @app.get("//favicon.ico")
-    async def favicon_double_slash():
-        favicon_path = "/app/static/favicon.ico"
-        if os.path.exists(favicon_path):
-            return FileResponse(favicon_path, media_type="image/x-icon")
-        return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
-
-    @app.get("//talk4finance/favicon.ico")
-    async def favicon_proxy_double_slash():
-        favicon_path = "/app/static/favicon.ico"
-        if os.path.exists(favicon_path):
-            return FileResponse(favicon_path, media_type="image/x-icon")
-        return JSONResponse(status_code=404, content={"detail": "Favicon not found"})
-
-# CORS preflight
-@app.options("/{rest_of_path:path}")
-async def preflight_handler():
-    return Response(status_code=204, headers={
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-        "Access-Control-Allow-Headers": "*",
-    })
-
-# Manifest routes - BOTH regular and double slash for reverse proxy
+# Manifest handling
 @app.get("/manifest.json")
 async def manifest():
     manifest_path = "/app/static/manifest.json"
@@ -311,68 +295,43 @@ if reverse_proxy:
             return FileResponse(manifest_path, media_type="application/json")
         return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
 
-    @app.get("//manifest.json")
-    async def manifest_double_slash():
-        manifest_path = "/app/static/manifest.json"
-        if os.path.exists(manifest_path):
-            return FileResponse(manifest_path, media_type="application/json")
-        return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+# Catch-all for React SPA routing
+@app.get("/{full_path:path}")
+async def serve_react_app(full_path: str):
+    # Skip API routes
+    if full_path.startswith("api/") or full_path.startswith("ws/"):
+        return JSONResponse(status_code=404, content={"detail": "API endpoint not found"})
 
-    @app.get("//talk4finance/manifest.json")
-    async def manifest_proxy_double_slash():
-        manifest_path = "/app/static/manifest.json"
-        if os.path.exists(manifest_path):
-            return FileResponse(manifest_path, media_type="application/json")
-        return JSONResponse(status_code=404, content={"detail": "Manifest not found"})
+    # Handle static assets
+    if any(full_path.endswith(ext) for ext in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
+        # Try nested static first (React build structure)
+        asset_path = f"/app/static/static/{full_path}"
+        if os.path.exists(asset_path):
+            return FileResponse(asset_path)
 
-# Static file serving
-static_dir = "/app/static"
+        # Try root static
+        asset_path = f"/app/static/{full_path}"
+        if os.path.exists(asset_path):
+            return FileResponse(asset_path)
 
-if os.path.exists(static_dir):
-    react_static_dir = os.path.join(static_dir, "static")
-    if os.path.exists(react_static_dir):
-        app.mount("/static", StaticFiles(directory=react_static_dir), name="react_static")
-        if reverse_proxy:
-            app.mount("/talk4finance/static", StaticFiles(directory=react_static_dir), name="react_static_proxy")
+        return JSONResponse(status_code=404, content={"detail": "Asset not found"})
 
-    app.mount("/assets", StaticFiles(directory=static_dir), name="assets")
-    if reverse_proxy:
-        app.mount("/talk4finance/assets", StaticFiles(directory=static_dir), name="assets_proxy")
+    # Serve React index.html for all other routes (SPA routing)
+    index_path = "/app/static/index.html"
+    if os.path.exists(index_path):
+        return FileResponse(index_path, media_type="text/html")
 
-# Asset manifest
-@app.get("/asset-manifest.json")
-async def asset_manifest():
-    asset_manifest_path = "/app/static/asset-manifest.json"
-    if os.path.exists(asset_manifest_path):
-        return FileResponse(asset_manifest_path, media_type="application/json")
-    return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
+    return JSONResponse(status_code=404, content={"detail": "React app not found"})
 
-if reverse_proxy:
-    @app.get("/talk4finance/asset-manifest.json")
-    async def asset_manifest_proxy():
-        asset_manifest_path = "/app/static/asset-manifest.json"
-        if os.path.exists(asset_manifest_path):
-            return FileResponse(asset_manifest_path, media_type="application/json")
-        return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
-
-    @app.get("//asset-manifest.json")
-    async def asset_manifest_double_slash():
-        asset_manifest_path = "/app/static/asset-manifest.json"
-        if os.path.exists(asset_manifest_path):
-            return FileResponse(asset_manifest_path, media_type="application/json")
-        return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
-
-    @app.get("//talk4finance/asset-manifest.json")
-    async def asset_manifest_proxy_double_slash():
-        asset_manifest_path = "/app/static/asset-manifest.json"
-        if os.path.exists(asset_manifest_path):
-            return FileResponse(asset_manifest_path, media_type="application/json")
-        return JSONResponse(status_code=404, content={"detail": "Asset manifest not found"})
-
-# Catch-all routes for React SPA
+# Reverse proxy catch-all
 if reverse_proxy:
     @app.get("/talk4finance/{full_path:path}")
     async def serve_react_app_proxy(full_path: str):
+        # Skip API routes
+        if full_path.startswith("api/") or full_path.startswith("ws/"):
+            return JSONResponse(status_code=404, content={"detail": "API endpoint not found"})
+
+        # Handle static assets
         if any(full_path.endswith(ext) for ext in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
             asset_path = f"/app/static/static/{full_path}"
             if os.path.exists(asset_path):
@@ -382,29 +341,11 @@ if reverse_proxy:
                 return FileResponse(asset_path)
             return JSONResponse(status_code=404, content={"detail": "Asset not found"})
 
+        # Serve React index.html
         index_path = "/app/static/index.html"
         if os.path.exists(index_path):
             return FileResponse(index_path, media_type="text/html")
         return JSONResponse(status_code=404, content={"detail": "React app not found"})
-
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str):
-    if reverse_proxy and full_path.startswith('talk4finance/'):
-        return JSONResponse(status_code=404, content={"detail": "Use prefixed route"})
-
-    if any(full_path.endswith(ext) for ext in [".js", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".json"]):
-        asset_path = f"/app/static/static/{full_path}"
-        if os.path.exists(asset_path):
-            return FileResponse(asset_path)
-        asset_path = f"/app/static/{full_path}"
-        if os.path.exists(asset_path):
-            return FileResponse(asset_path)
-        return JSONResponse(status_code=404, content={"detail": "Asset not found"})
-
-    index_path = "/app/static/index.html"
-    if os.path.exists(index_path):
-        return FileResponse(index_path, media_type="text/html")
-    return JSONResponse(status_code=404, content={"detail": "React app not found"})
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

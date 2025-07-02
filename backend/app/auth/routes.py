@@ -5,14 +5,19 @@ Authentication routes - Updated with approval system
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 from typing import List
+from pydantic import BaseModel
+
 from app.database.connection import get_db
-from app.database.models import User, PendingUserNotification, UserStatus, UserRole
+from app.database.models import (
+    User, PendingUserNotification, UserStatus, UserRole,
+    Conversation, Message  # Add these imports
+)
 from app.auth.models import (
     UserCreate, UserLogin, Token, User as UserResponse, UserUpdate,
     PasswordChange, PendingUser, UserApprovalRequest, ADMIN_EMAIL
 )
-
 from app.auth.dependencies import get_current_user, get_current_admin_user
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.config import settings
@@ -21,6 +26,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 auth_router = APIRouter()
+
+# Pydantic models for request bodies
+class UserStatusUpdate(BaseModel):
+    new_status: str
+
+class UserRoleUpdate(BaseModel):
+    new_role: str
 
 @auth_router.post("/register")
 async def register(
@@ -226,10 +238,12 @@ async def get_all_users(
     users = db.query(User).order_by(User.created_at.desc()).all()
     return users
 
+# Also replace the status update endpoint in your backend/app/auth/routes.py with this version:
+
 @auth_router.put("/admin/user/{user_id}/status")
 async def update_user_status(
         user_id: int,
-        new_status: str,
+        request: dict,  # Accept plain dictionary instead of Pydantic model
         current_admin: User = Depends(get_current_admin_user),
         db: Session = Depends(get_db)
 ):
@@ -243,11 +257,23 @@ async def update_user_status(
             detail="User not found"
         )
 
+    # Get new_status from the request dictionary
+    new_status = request.get("new_status")
+
+    if not new_status:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="new_status is required"
+        )
+
+    # Keep it lowercase to match your enum values
+    new_status = new_status.lower()
+
     try:
-        user.status = UserStatus(new_status)
-        if new_status == UserStatus.APPROVED:
+        user.status = UserStatus(new_status)  # Use lowercase value
+        if new_status == "approved":
             user.is_active = True
-        elif new_status in [UserStatus.REJECTED, UserStatus.SUSPENDED]:
+        elif new_status in ["rejected", "suspended"]:
             user.is_active = False
 
         db.commit()
@@ -261,10 +287,171 @@ async def update_user_status(
             "new_status": new_status
         }
 
-    except ValueError:
+    except ValueError as e:
+        logger.error(f"Error updating user status: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid status value"
+            detail=f"Invalid status value: {str(e)}"
+        )
+
+# Replace the role update endpoint in your backend/app/auth/routes.py with this version:
+
+@auth_router.put("/admin/user/{user_id}/role")
+async def update_user_role(
+        user_id: int,
+        request: dict,  # Accept plain dictionary instead of Pydantic model
+        current_admin: User = Depends(get_current_admin_user),
+        db: Session = Depends(get_db)
+):
+    """Update user role (admin only)"""
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Don't allow changing your own role
+    if user.id == current_admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role"
+        )
+
+    # Get new_role from the request dictionary
+    new_role = request.get("new_role")
+
+    if not new_role:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="new_role is required"
+        )
+
+    # Keep it lowercase to match your enum values
+    new_role = new_role.lower()
+
+    if new_role not in ["admin", "user"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role value. Must be 'admin' or 'user'"
+        )
+
+    try:
+        user.role = UserRole(new_role)  # Use lowercase value
+        db.commit()
+        db.refresh(user)
+
+        logger.info(f"User role updated: {user.email} -> {new_role} by admin: {current_admin.email}")
+
+        return {
+            "message": f"User role updated to {new_role}",
+            "user_id": user.id,
+            "new_role": new_role
+        }
+
+    except ValueError as e:
+        logger.error(f"Error updating user role: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid role value: {str(e)}"
+        )
+
+@auth_router.delete("/admin/user/{user_id}")
+async def delete_user_by_admin(
+        user_id: int,
+        current_admin: User = Depends(get_current_admin_user),
+        db: Session = Depends(get_db)
+):
+    """Delete a user and all their data (admin only)"""
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Don't allow deleting your own account
+    if user.id == current_admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+
+    try:
+        # Delete user conversations and messages (cascade delete)
+        conversations = db.query(Conversation).filter(Conversation.user_id == user_id).all()
+        for conversation in conversations:
+            # Delete all messages in the conversation
+            db.query(Message).filter(Message.conversation_id == conversation.id).delete()
+            # Delete the conversation
+            db.delete(conversation)
+
+        # Delete any pending user notifications
+        db.query(PendingUserNotification).filter(PendingUserNotification.user_id == user_id).delete()
+
+        # Delete the user
+        db.delete(user)
+        db.commit()
+
+        logger.info(f"User deleted: {user.email} by admin: {current_admin.email}")
+
+        return {
+            "message": f"User {user.username} and all associated data have been permanently deleted",
+            "deleted_user_id": user_id
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user"
+        )
+
+@auth_router.delete("/delete-account")
+async def delete_my_account(
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """Delete current user's own account and all their data"""
+
+    try:
+        user_id = current_user.id
+        user_email = current_user.email
+        username = current_user.username
+
+        # Delete user conversations and messages (cascade delete)
+        conversations = db.query(Conversation).filter(Conversation.user_id == user_id).all()
+        for conversation in conversations:
+            # Delete all messages in the conversation
+            db.query(Message).filter(Message.conversation_id == conversation.id).delete()
+            # Delete the conversation
+            db.delete(conversation)
+
+        # Delete any pending user notifications
+        db.query(PendingUserNotification).filter(PendingUserNotification.user_id == user_id).delete()
+
+        # Delete the user
+        db.delete(current_user)
+        db.commit()
+
+        logger.info(f"User self-deleted: {user_email}")
+
+        return {
+            "message": f"Account for {username} has been permanently deleted",
+            "deleted_user_id": user_id
+        }
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error in self-delete for user {current_user.id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete account"
         )
 
 # Regular user profile management
@@ -329,158 +516,3 @@ async def change_password(
     db.commit()
 
     return {"message": "Password changed successfully"}
-
-# Add required import
-from sqlalchemy.sql import func
-
-from pydantic import BaseModel
-
-# Add this model class if not already present
-class UserRoleUpdate(BaseModel):
-    new_role: str
-
-@auth_router.put("/admin/user/{user_id}/status")
-async def update_user_status(
-        user_id: int,
-        request: dict,  # Changed from expecting a body parameter
-        current_admin: User = Depends(get_current_admin_user),
-        db: Session = Depends(get_db)
-):
-    """Update user status (admin only)"""
-
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-
-    # Get the new status from the request
-    new_status = request.get("new_status")
-
-    if not new_status:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="new_status is required"
-        )
-
-    try:
-        user.status = UserStatus(new_status)
-        if new_status == UserStatus.APPROVED:
-            user.is_active = True
-        elif new_status in [UserStatus.REJECTED, UserStatus.SUSPENDED]:
-            user.is_active = False
-
-        db.commit()
-        db.refresh(user)
-
-        logger.info(f"User status updated: {user.email} -> {new_status} by admin: {current_admin.email}")
-
-        return {
-            "message": f"User status updated to {new_status}",
-            "user_id": user.id,
-            "new_status": new_status
-        }
-
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid status value"
-        )
-
-    @auth_router.delete("/admin/user/{user_id}")
-    async def delete_user_by_admin(
-            user_id: int,
-            current_admin: User = Depends(get_current_admin_user),
-            db: Session = Depends(get_db)
-    ):
-        """Delete a user and all their data (admin only)"""
-
-        user = db.query(User).filter(User.id == user_id).first()
-
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
-
-        # Don't allow deleting your own account
-        if user.id == current_admin.id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete your own account"
-            )
-
-        try:
-            # Delete user conversations and messages (cascade delete)
-            conversations = db.query(Conversation).filter(Conversation.user_id == user_id).all()
-            for conversation in conversations:
-                # Delete all messages in the conversation
-                db.query(Message).filter(Message.conversation_id == conversation.id).delete()
-                # Delete the conversation
-                db.delete(conversation)
-
-            # Delete any pending user notifications
-            db.query(PendingUserNotification).filter(PendingUserNotification.user_id == user_id).delete()
-
-            # Delete the user
-            db.delete(user)
-            db.commit()
-
-            logger.info(f"User deleted: {user.email} by admin: {current_admin.email}")
-
-            return {
-                "message": f"User {user.username} and all associated data have been permanently deleted",
-                "deleted_user_id": user_id
-            }
-
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Error deleting user {user_id}: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete user"
-            )
-
-    @auth_router.delete("/delete-account")
-    async def delete_my_account(
-            current_user: User = Depends(get_current_user),
-            db: Session = Depends(get_db)
-    ):
-        """Delete current user's own account and all their data"""
-
-        try:
-            user_id = current_user.id
-            user_email = current_user.email
-            username = current_user.username
-
-            # Delete user conversations and messages (cascade delete)
-            conversations = db.query(Conversation).filter(Conversation.user_id == user_id).all()
-            for conversation in conversations:
-                # Delete all messages in the conversation
-                db.query(Message).filter(Message.conversation_id == conversation.id).delete()
-                # Delete the conversation
-                db.delete(conversation)
-
-            # Delete any pending user notifications
-            db.query(PendingUserNotification).filter(PendingUserNotification.user_id == user_id).delete()
-
-            # Delete the user
-            db.delete(current_user)
-            db.commit()
-
-            logger.info(f"User self-deleted: {user_email}")
-
-            return {
-                "message": f"Account for {username} has been permanently deleted",
-                "deleted_user_id": user_id
-            }
-
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Error in self-delete for user {current_user.id}: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete account"
-            )

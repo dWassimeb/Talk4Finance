@@ -1,8 +1,11 @@
-// frontend/src/components/Auth/Register.js
+// frontend/src/components/Auth/Register.jsx
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, User, Lock, CheckCircle, AlertCircle } from 'lucide-react';
-import { authService } from '../../services/auth';
+import { useAuth } from '../../hooks/useAuth';
+import {
+  Bot, Lock, Mail, User, Sparkles, TrendingUp, BarChart3,
+  DollarSign, Shield, CheckCircle, AlertCircle, Eye, EyeOff
+} from 'lucide-react';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -11,296 +14,353 @@ const Register = () => {
     password: '',
     confirmPassword: ''
   });
+  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [success, setSuccess] = useState(false);
-  const [registrationComplete, setRegistrationComplete] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordChecks, setPasswordChecks] = useState({
+    length: false,
+    uppercase: false,
+    lowercase: false,
+    number: false
+  });
+  const { register } = useAuth();
   const navigate = useNavigate();
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    // Clear errors when user starts typing
-    if (error) setError(null);
+  const validatePassword = (password) => {
+    const checks = {
+      length: password.length >= 8,
+      uppercase: /[A-Z]/.test(password),
+      lowercase: /[a-z]/.test(password),
+      number: /\d/.test(password)
+    };
+    setPasswordChecks(checks);
+    return Object.values(checks).every(Boolean);
   };
 
-  const validateForm = () => {
-    const { email, username, password, confirmPassword } = formData;
-
-    // Email domain validation
-    const allowedDomains = ['@docaposte.fr', '@softeam.fr'];
-    const isValidDomain = allowedDomains.some(domain => email.endsWith(domain));
-
-    if (!isValidDomain) {
-      setError('Email must be from an allowed domain (@docaposte.fr or @softeam.fr)');
-      return false;
-    }
-
-    // Password validation
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
-      return false;
-    }
-
-    if (!/(?=.*[a-z])/.test(password)) {
-      setError('Password must contain at least one lowercase letter');
-      return false;
-    }
-
-    if (!/(?=.*[A-Z])/.test(password)) {
-      setError('Password must contain at least one uppercase letter');
-      return false;
-    }
-
-    if (!/(?=.*\d)/.test(password)) {
-      setError('Password must contain at least one digit');
-      return false;
-    }
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return false;
-    }
-
-    if (!username.trim()) {
-      setError('Username is required');
-      return false;
-    }
-
-    return true;
+  const validateEmail = (email) => {
+    return email.endsWith('@docaposte.fr') || email.endsWith('@softeam.fr');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    if (!validateForm()) {
+    // Validation
+    if (!validateEmail(formData.email)) {
+      setError('Email must be from @docaposte.fr or @softeam.fr domain');
+      setLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
-
-    try {
-      const response = await authService.register(
-        formData.email,
-        formData.username,
-        formData.password
-      );
-
-      setSuccess(true);
-      setRegistrationComplete(true);
-
-      // Clear form
-      setFormData({
-        email: '',
-        username: '',
-        password: '',
-        confirmPassword: ''
-      });
-
-    } catch (err) {
-      const errorMessage = err.response?.data?.detail || 'Registration failed. Please try again.';
-      setError(errorMessage);
-    } finally {
+    if (!validatePassword(formData.password)) {
+      setError('Password does not meet requirements');
       setLoading(false);
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      setLoading(false);
+      return;
+    }
+
+    const result = await register(formData.email, formData.username, formData.password);
+
+    if (result.success) {
+      // Show success message before redirect
+      setError('');
+      setTimeout(() => navigate('/login'), 2000);
+    } else {
+      setError(result.error);
+    }
+
+    setLoading(false);
+  };
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value
+    });
+
+    if (name === 'password') {
+      validatePassword(value);
     }
   };
 
-  if (registrationComplete) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-[#E6F7F8] via-[#F0FAFB] to-white flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-white/20">
-            <div className="text-center">
-              <div className="mx-auto flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-6">
-                <CheckCircle className="w-8 h-8 text-green-600" />
-              </div>
-
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">Registration Submitted!</h2>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <div className="flex items-start space-x-3">
-                  <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                  <div className="text-sm text-blue-800 text-left">
-                    <p className="font-medium mb-2">Your account is pending approval</p>
-                    <ul className="space-y-1 text-xs">
-                      <li>• An administrator has been notified of your registration</li>
-                      <li>• You will receive an email once your account is reviewed</li>
-                      <li>• This process typically takes 1-2 business days</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <button
-                  onClick={() => navigate('/login')}
-                  className="w-full bg-gradient-to-r from-[#00ACB5] to-[#00929A] text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-200 hover:from-[#00929A] hover:to-[#007A80]"
-                >
-                  Go to Login
-                </button>
-
-                <button
-                  onClick={() => {
-                    setRegistrationComplete(false);
-                    setSuccess(false);
-                  }}
-                  className="w-full text-[#00ACB5] hover:text-[#00929A] font-medium py-2 transition-colors"
-                >
-                  Register Another Account
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#E6F7F8] via-[#F0FAFB] to-white flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-2xl p-8 border border-white/20">
-          <div className="text-center mb-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h2>
-            <p className="text-gray-600">Join Talk4Finance with your company email</p>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-[#F8FFFE] via-[#E6F7F8] to-[#D4F4F7] flex items-center justify-center px-4 py-8 relative overflow-hidden">
+      {/* Animated Background Elements */}
+      <div className="absolute inset-0">
+        <div className="absolute top-20 left-20 w-96 h-96 bg-gradient-to-r from-[#00ACB5]/30 to-[#00929A]/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute bottom-20 right-20 w-80 h-80 bg-gradient-to-r from-[#00929A]/20 to-[#007A80]/30 rounded-full blur-3xl animate-pulse" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-gradient-to-r from-[#00ACB5]/10 to-[#00929A]/10 rounded-full blur-3xl animate-pulse" style={{animationDelay: '2s'}}></div>
+      </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-start space-x-2">
-                <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                <span className="text-sm">{error}</span>
-              </div>
-            )}
+      {/* Floating Elements */}
+      <div className="absolute top-10 left-10 w-4 h-4 bg-[#00ACB5]/60 rounded-full animate-bounce"></div>
+      <div className="absolute top-32 right-20 w-3 h-3 bg-[#00929A]/60 rounded-full animate-bounce" style={{animationDelay: '0.5s'}}></div>
+      <div className="absolute bottom-32 left-32 w-5 h-5 bg-[#007A80]/60 rounded-full animate-bounce" style={{animationDelay: '1s'}}></div>
 
-            {/* Domain restriction notice */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start space-x-2">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-blue-800">
-                  <p className="font-medium">Access Restricted</p>
-                  <p>Only employees with @docaposte.fr or @softeam.fr email addresses can register.</p>
-                </div>
-              </div>
-            </div>
+      <div className="relative max-w-6xl w-full">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Company Email *
-                </label>
+          {/* Left Side - Branding & Features */}
+          <div className="space-y-8 text-center lg:text-left">
+            {/* Main Branding */}
+            <div className="space-y-6">
+              <div className="flex items-center justify-center lg:justify-start space-x-3">
                 <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="your.name@docaposte.fr"
-                  />
+                  <div className="w-16 h-16 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-2xl flex items-center justify-center">
+                    <Bot className="w-8 h-8 text-white" />
+                  </div>
+                  <div className="absolute -inset-1 bg-gradient-to-r from-[#00ACB5] to-[#00929A] rounded-2xl blur opacity-25 animate-pulse"></div>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Must be @docaposte.fr or @softeam.fr
+                <div>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-[#00ACB5] to-[#00929A] bg-clip-text text-transparent">
+                    Talk4Finance
+                  </h1>
+                  <p className="text-gray-600">Your AI Financial Agent</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h2 className="text-3xl font-bold text-gray-900">
+                  Join the Future of <span className="text-[#00ACB5]">Financial Intelligence</span>
+                </h2>
+                <p className="text-lg text-gray-600 leading-relaxed">
+                  Experience next-generation AI-powered financial analysis and insights.
+                  Transform how you interact with financial data.
                 </p>
               </div>
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Username *
-                </label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="text"
-                    name="username"
-                    value={formData.username}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="Choose a username"
-                  />
+            {/* Feature Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="group p-6 bg-white/70 backdrop-blur-xl rounded-2xl border border-white/30 hover:bg-white/80 transition-all duration-300 hover:shadow-lg hover:scale-105">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#00ACB5]/20 to-[#00929A]/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <TrendingUp className="w-6 h-6 text-[#00ACB5]" />
                 </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Smart Analytics</h3>
+                <p className="text-sm text-gray-600">Advanced AI-driven financial analysis and trend prediction</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Password *
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="Enter your password"
-                  />
+              <div className="group p-6 bg-white/70 backdrop-blur-xl rounded-2xl border border-white/30 hover:bg-white/80 transition-all duration-300 hover:shadow-lg hover:scale-105">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#00ACB5]/20 to-[#00929A]/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <BarChart3 className="w-6 h-6 text-[#00ACB5]" />
                 </div>
-                <div className="text-xs text-gray-500 mt-1 space-y-1">
-                  <p>Password must contain:</p>
-                  <ul className="list-disc list-inside space-y-0.5 ml-2">
-                    <li>At least 8 characters</li>
-                    <li>One uppercase and one lowercase letter</li>
-                    <li>At least one digit</li>
-                  </ul>
-                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Real-time Insights</h3>
+                <p className="text-sm text-gray-600">Instant access to comprehensive financial metrics and KPIs</p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Confirm Password *
-                </label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                  <input
-                    type="password"
-                    name="confirmPassword"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                    className="w-full pl-12 pr-4 py-4 bg-white/50 backdrop-blur-sm border border-gray-200/50 rounded-2xl focus:ring-2 focus:ring-[#00ACB5]/20 focus:border-[#00ACB5]/50 transition-all duration-200"
-                    placeholder="Confirm your password"
-                  />
+              <div className="group p-6 bg-white/70 backdrop-blur-xl rounded-2xl border border-white/30 hover:bg-white/80 transition-all duration-300 hover:shadow-lg hover:scale-105">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#00ACB5]/20 to-[#00929A]/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <DollarSign className="w-6 h-6 text-[#00ACB5]" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Revenue Optimization</h3>
+                <p className="text-sm text-gray-600">Identify opportunities and optimize financial performance</p>
+              </div>
+
+              <div className="group p-6 bg-white/70 backdrop-blur-xl rounded-2xl border border-white/30 hover:bg-white/80 transition-all duration-300 hover:shadow-lg hover:scale-105">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#00ACB5]/20 to-[#00929A]/20 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <Shield className="w-6 h-6 text-[#00ACB5]" />
+                </div>
+                <h3 className="font-semibold text-gray-900 mb-2">Enterprise Security</h3>
+                <p className="text-sm text-gray-600">Bank-level security with role-based access control</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side - Registration Form */}
+          <div className="relative">
+            <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 p-8 relative overflow-hidden">
+              {/* Form Background Pattern */}
+              <div className="absolute inset-0 bg-gradient-to-br from-[#00ACB5]/5 to-[#00929A]/5"></div>
+
+              {/* Form Content */}
+              <div className="relative z-10">
+                <div className="text-center mb-8">
+                  <div className="w-12 h-12 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="w-6 h-6 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 mb-2">Create Your Account</h3>
+                  <p className="text-gray-600">Join the financial intelligence revolution</p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  {error && (
+                    <div className="bg-red-50/80 backdrop-blur-sm border border-red-200/50 text-red-700 px-4 py-3 rounded-xl flex items-start space-x-2">
+                      <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                      <span className="text-sm">{error}</span>
+                    </div>
+                  )}
+
+                  {/* Email Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        required
+                        className="w-full pl-12 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-[#00ACB5]/30 focus:border-[#00ACB5] transition-all duration-200"
+                        placeholder="your.email@docaposte.fr"
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">Must be @docaposte.fr or @softeam.fr domain</p>
+                  </div>
+
+                  {/* Username Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Username
+                    </label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <input
+                        type="text"
+                        name="username"
+                        value={formData.username}
+                        onChange={handleChange}
+                        required
+                        className="w-full pl-12 pr-4 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-[#00ACB5]/30 focus:border-[#00ACB5] transition-all duration-200"
+                        placeholder="Choose a unique username"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        value={formData.password}
+                        onChange={handleChange}
+                        required
+                        className="w-full pl-12 pr-12 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-[#00ACB5]/30 focus:border-[#00ACB5] transition-all duration-200"
+                        placeholder="Create a strong password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+
+                    {/* Password Requirements */}
+                    <div className="mt-3 space-y-2">
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className={`flex items-center space-x-1 ${passwordChecks.length ? 'text-green-600' : 'text-gray-400'}`}>
+                          <CheckCircle className="w-3 h-3" />
+                          <span>8+ characters</span>
+                        </div>
+                        <div className={`flex items-center space-x-1 ${passwordChecks.uppercase ? 'text-green-600' : 'text-gray-400'}`}>
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Uppercase</span>
+                        </div>
+                        <div className={`flex items-center space-x-1 ${passwordChecks.lowercase ? 'text-green-600' : 'text-gray-400'}`}>
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Lowercase</span>
+                        </div>
+                        <div className={`flex items-center space-x-1 ${passwordChecks.number ? 'text-green-600' : 'text-gray-400'}`}>
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Number</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Confirm Password Field */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        name="confirmPassword"
+                        value={formData.confirmPassword}
+                        onChange={handleChange}
+                        required
+                        className="w-full pl-12 pr-12 py-3 bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-xl focus:ring-2 focus:ring-[#00ACB5]/30 focus:border-[#00ACB5] transition-all duration-200"
+                        placeholder="Confirm your password"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="relative w-full bg-gradient-to-r from-[#00ACB5] to-[#00929A] hover:from-[#00929A] hover:to-[#007A80] disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-3 px-6 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none group overflow-hidden"
+                  >
+                    <span className="relative z-10 flex items-center justify-center">
+                      {loading ? (
+                        <>
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                          Creating account...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-5 h-5 mr-2" />
+                          Create Account
+                        </>
+                      )}
+                    </span>
+                    {!loading && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-[#00ACB5] to-[#00929A] transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300"></div>
+                    )}
+                  </button>
+
+                  {/* Admin Approval Notice */}
+                  <div className="bg-blue-50/80 backdrop-blur-sm border border-blue-200/50 text-blue-700 px-4 py-3 rounded-xl">
+                    <div className="flex items-start space-x-2">
+                      <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <p className="font-medium">Admin Approval Required</p>
+                        <p className="text-blue-600">Your account will be reviewed by an administrator before activation. You'll receive an email notification once approved.</p>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+
+                {/* Login Link */}
+                <div className="mt-8 text-center">
+                  <p className="text-gray-600">
+                    Already have an account?{' '}
+                    <Link
+                      to="/login"
+                      className="text-[#00ACB5] hover:text-[#00929A] font-medium transition-colors duration-200"
+                    >
+                      Sign in here
+                    </Link>
+                  </p>
                 </div>
               </div>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="relative w-full bg-gradient-to-r from-[#00ACB5] to-[#00929A] hover:from-[#00929A] hover:to-[#007A80] disabled:from-gray-300 disabled:to-gray-400 text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:shadow-none group"
-            >
-              <span className="relative z-10">
-                {loading ? (
-                  <div className="flex items-center justify-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Creating account...
-                  </div>
-                ) : (
-                  'Create Account'
-                )}
-              </span>
-              {!loading && (
-                <div className="absolute -inset-1 bg-gradient-to-r from-[#00ACB5] to-[#00929A] rounded-2xl blur opacity-25 group-hover:opacity-40 transition-opacity"></div>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-8 text-center">
-            <p className="text-gray-600">
-              Already have an account?{' '}
-              <Link to="/login" className="text-[#00ACB5] hover:text-[#00929A] font-medium transition-colors">
-                Sign in
-              </Link>
-            </p>
           </div>
         </div>
       </div>

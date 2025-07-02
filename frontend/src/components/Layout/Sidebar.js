@@ -1,8 +1,8 @@
-// frontend/src/components/Layout/Sidebar.jsx
+// frontend/src/components/Layout/Sidebar.js
 import React from 'react';
 import { useChat } from '../../hooks/useChat';
 import ChatHistory from '../Chat/ChatHistory';
-import { Plus, X, MessageSquare } from 'lucide-react';
+import { Plus, X, MessagesSquare, Sparkles } from 'lucide-react';
 
 const Sidebar = ({ isOpen, onClose, onNewChat }) => {
   return (
@@ -23,8 +23,13 @@ const Sidebar = ({ isOpen, onClose, onNewChat }) => {
         {/* Sidebar Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200/50">
           <div className="flex items-center space-x-3">
-            <MessageSquare className="w-5 h-5 text-[#00ACB5]" />
-            <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
+            <div className="w-8 h-8 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-xl flex items-center justify-center">
+              <MessagesSquare className="w-4 h-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Conversations</h2>
+              <p className="text-xs text-gray-500">Your chat history</p>
+            </div>
           </div>
           <div className="flex items-center space-x-2">
             <button
@@ -52,6 +57,10 @@ const Sidebar = ({ isOpen, onClose, onNewChat }) => {
         {/* Footer */}
         <div className="p-4 border-t border-gray-200/50">
           <div className="text-center">
+            <div className="flex items-center justify-center space-x-2 mb-2">
+              <Sparkles className="w-4 h-4 text-[#00ACB5]" />
+              <p className="text-xs text-gray-600 font-medium">Talk4Finance</p>
+            </div>
             <p className="text-xs text-gray-500">
               Powered by Castor
             </p>

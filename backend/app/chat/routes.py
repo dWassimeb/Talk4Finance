@@ -74,3 +74,45 @@ async def delete_conversation(
     db.commit()
 
     return {"message": "Conversation deleted successfully"}
+
+
+# Add this to your backend/app/chat/routes.py file
+
+@chat_router.put("/conversations/{conversation_id}/title")
+async def update_conversation_title(
+        conversation_id: int,
+        request: dict,  # expecting {"title": "new title"}
+        current_user: User = Depends(get_current_user),
+        db: Session = Depends(get_db)
+):
+    """Update conversation title"""
+
+    conversation = db.query(Conversation).filter(
+        Conversation.id == conversation_id,
+        Conversation.user_id == current_user.id
+    ).first()
+
+    if not conversation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found"
+        )
+
+    new_title = request.get("title")
+    if not new_title:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Title is required"
+        )
+
+    conversation.title = new_title
+    conversation.updated_at = func.now()
+
+    db.commit()
+    db.refresh(conversation)
+
+    return {
+        "message": "Conversation title updated successfully",
+        "conversation_id": conversation.id,
+        "title": conversation.title
+    }

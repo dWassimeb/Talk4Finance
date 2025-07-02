@@ -21,4 +21,12 @@ export const chatService = {
     const response = await api.delete(`/api/chat/conversations/${conversationId}`);
     return response.data;
   },
+
+  async updateConversationTitle(conversationId, title) {
+    const response = await api.put(`/api/chat/conversations/${conversationId}/title`, {
+      title: title
+    });
+    return response.data;
+  },
+  
 };

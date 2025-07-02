@@ -246,23 +246,45 @@ export const ChatProvider = ({ children }) => {
     }
   };
 
-  const updateConversationTitle = async (conversationId, newTitle) => {
-    try {
-      // Update local state immediately
-      setConversations(prev => prev.map(conv =>
-        conv.id === conversationId ? { ...conv, title: newTitle } : conv
-      ));
+  // Update the updateConversationTitle function in your ChatContext.js
 
-      if (currentConversation && currentConversation.id === conversationId) {
-        setCurrentConversation(prev => ({ ...prev, title: newTitle }));
+    const updateConversationTitle = async (conversationId, newTitle) => {
+      try {
+        console.log(`🏷️ Updating conversation ${conversationId} title to: "${newTitle}"`);
+
+        // Update local state immediately for better UX
+        setConversations(prev =>
+          prev.map(conv =>
+            conv.id === conversationId ? { ...conv, title: newTitle } : conv
+          )
+        );
+
+        if (currentConversation && currentConversation.id === conversationId) {
+          setCurrentConversation(prev => ({ ...prev, title: newTitle }));
+        }
+
+        // Persist to backend
+        await chatService.updateConversationTitle(conversationId, newTitle);
+        console.log(`✅ Successfully updated conversation title on backend`);
+
+        // Refresh conversations to ensure sync
+        await loadConversations();
+
+      } catch (error) {
+        console.error('❌ Failed to update conversation title:', error);
+
+        // Revert local state on failure
+        setConversations(prev =>
+          prev.map(conv =>
+            conv.id === conversationId ? { ...conv, title: 'New Conversation' } : conv
+          )
+        );
+
+        if (currentConversation && currentConversation.id === conversationId) {
+          setCurrentConversation(prev => ({ ...prev, title: 'New Conversation' }));
+        }
       }
-
-      // TODO: Add API call to update title on backend when ready
-      // await chatService.updateConversationTitle(conversationId, newTitle);
-    } catch (error) {
-      console.error('Failed to update conversation title:', error);
-    }
-  };
+    };
 
   const selectConversation = async (conversationId) => {
     try {

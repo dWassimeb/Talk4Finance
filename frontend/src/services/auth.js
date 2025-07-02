@@ -61,8 +61,25 @@ export const authService = {
 
   async updateUserStatus(userId, newStatus) {
     const response = await api.put(`/api/auth/admin/user/${userId}/status`, {
-      status: newStatus
+      new_status: newStatus
     });
+    return response.data;
+  },
+
+  async updateUserRole(userId, newRole) {
+    const response = await api.put(`/api/auth/admin/user/${userId}/role`, {
+      new_role: newRole
+    });
+    return response.data;
+  },
+
+  async deleteUser(userId) {
+    const response = await api.delete(`/api/auth/admin/user/${userId}`);
+    return response.data;
+  },
+
+  async deleteMyAccount() {
+    const response = await api.delete('/api/auth/delete-account');
     return response.data;
   }
 };

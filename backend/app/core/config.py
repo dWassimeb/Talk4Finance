@@ -27,17 +27,18 @@ class Settings(BaseSettings):
     gpt_api_key: Optional[str] = None
 
     # Email Configuration (SMTP)
-    smtp_server: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_username: Optional[str] = None
-    smtp_password: Optional[str] = None
-    from_email: str = "noreply@docaposte.fr"
+    SMTP_SERVER: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    FROM_EMAIL: str = "noreply@docaposte.fr"
+    BASE_URL: str = "http://localhost:3000"
 
     # Application Configuration
     base_url: str = "http://localhost:3000"
 
     # Admin Configuration
-    admin_email: str = "mohamed-ouassime.el-yamani@docaposte.fr"
+    ADMIN_EMAIL: str = "mohamed-ouassime.el-yamani@docaposte.fr"
     allowed_domains: list = ["@docaposte.fr", "@softeam.fr"]
 
     # Rate Limiting

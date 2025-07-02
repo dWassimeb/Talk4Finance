@@ -332,3 +332,157 @@ async def change_password(
 
 # Add required import
 from sqlalchemy.sql import func
+
+from pydantic import BaseModel
+
+# Add this model class if not already present
+class UserRoleUpdate(BaseModel):
+    new_role: str
+
+@auth_router.put("/admin/user/{user_id}/role")
+async def update_user_role(
+        user_id: int,
+        role_update: UserRoleUpdate,
+        current_admin: User = Depends(get_current_admin_user),
+        db: Session = Depends(get_db)
+):
+    """Update user role (admin only)"""
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Don't allow changing your own role
+    if user.id == current_admin.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot change your own role"
+        )
+
+    new_role = role_update.new_role
+
+    if new_role not in ["admin", "user"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role value. Must be 'admin' or 'user'"
+        )
+
+    try:
+        user.role = UserRole(new_role)
+        db.commit()
+        db.refresh(user)
+
+        logger.info(f"User role updated: {user.email} -> {new_role} by admin: {current_admin.email}")
+
+        return {
+            "message": f"User role updated to {new_role}",
+            "user_id": user.id,
+            "new_role": new_role
+        }
+
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role value. Must be 'admin' or 'user'"
+        )
+
+
+    @auth_router.delete("/admin/user/{user_id}")
+    async def delete_user_by_admin(
+            user_id: int,
+            current_admin: User = Depends(get_current_admin_user),
+            db: Session = Depends(get_db)
+    ):
+        """Delete a user and all their data (admin only)"""
+
+        user = db.query(User).filter(User.id == user_id).first()
+
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Don't allow deleting your own account
+        if user.id == current_admin.id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot delete your own account"
+            )
+
+        try:
+            # Delete user conversations and messages (cascade delete)
+            conversations = db.query(Conversation).filter(Conversation.user_id == user_id).all()
+            for conversation in conversations:
+                # Delete all messages in the conversation
+                db.query(Message).filter(Message.conversation_id == conversation.id).delete()
+                # Delete the conversation
+                db.delete(conversation)
+
+            # Delete any pending user notifications
+            db.query(PendingUserNotification).filter(PendingUserNotification.user_id == user_id).delete()
+
+            # Delete the user
+            db.delete(user)
+            db.commit()
+
+            logger.info(f"User deleted: {user.email} by admin: {current_admin.email}")
+
+            return {
+                "message": f"User {user.username} and all associated data have been permanently deleted",
+                "deleted_user_id": user_id
+            }
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error deleting user {user_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete user"
+            )
+
+    @auth_router.delete("/delete-account")
+    async def delete_my_account(
+            current_user: User = Depends(get_current_user),
+            db: Session = Depends(get_db)
+    ):
+        """Delete current user's own account and all their data"""
+
+        try:
+            user_id = current_user.id
+            user_email = current_user.email
+            username = current_user.username
+
+            # Delete user conversations and messages (cascade delete)
+            conversations = db.query(Conversation).filter(Conversation.user_id == user_id).all()
+            for conversation in conversations:
+                # Delete all messages in the conversation
+                db.query(Message).filter(Message.conversation_id == conversation.id).delete()
+                # Delete the conversation
+                db.delete(conversation)
+
+            # Delete any pending user notifications
+            db.query(PendingUserNotification).filter(PendingUserNotification.user_id == user_id).delete()
+
+            # Delete the user
+            db.delete(current_user)
+            db.commit()
+
+            logger.info(f"User self-deleted: {user_email}")
+
+            return {
+                "message": f"Account for {username} has been permanently deleted",
+                "deleted_user_id": user_id
+            }
+
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error in self-delete for user {current_user.id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete account"
+            )

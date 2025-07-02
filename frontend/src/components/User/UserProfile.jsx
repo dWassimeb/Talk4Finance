@@ -1,17 +1,19 @@
 // frontend/src/components/User/UserProfile.jsx
 import React, { useState } from 'react';
-import { X, User, Mail, Lock, Save, Eye, EyeOff } from 'lucide-react';
+import { X, User, Mail, Lock, Save, Eye, EyeOff, Trash2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { authService } from '../../services/auth';
 
 const UserProfile = ({ isOpen, onClose }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
 
   const [profileData, setProfileData] = useState({
     username: user?.username || '',
@@ -90,6 +92,31 @@ const UserProfile = ({ isOpen, onClose }) => {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== 'DELETE') {
+      setMessage({ type: 'error', text: 'Please type "DELETE" to confirm account deletion.' });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await authService.deleteMyAccount();
+      setMessage({ type: 'success', text: 'Account deleted successfully. Logging out...' });
+
+      // Wait a moment then logout
+      setTimeout(() => {
+        logout();
+      }, 2000);
+    } catch (error) {
+      setMessage({
+        type: 'error',
+        text: error.response?.data?.detail || 'Failed to delete account. Please try again.'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -129,6 +156,17 @@ const UserProfile = ({ isOpen, onClose }) => {
           >
             <Lock className="w-4 h-4 inline mr-2" />
             Change Password
+          </button>
+          <button
+            onClick={() => setActiveTab('danger')}
+            className={`flex-1 px-6 py-4 text-sm font-medium transition-colors duration-200 ${
+              activeTab === 'danger'
+                ? 'text-red-600 border-b-2 border-red-600 bg-red-50/5'
+                : 'text-gray-500 hover:text-red-600'
+            }`}
+          >
+            <Trash2 className="w-4 h-4 inline mr-2" />
+            Delete Account
           </button>
         </div>
 
@@ -205,19 +243,19 @@ const UserProfile = ({ isOpen, onClose }) => {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
-                    type={showCurrentPassword ? 'text' : 'password'}
+                    type={showCurrentPassword ? "text" : "password"}
                     name="currentPassword"
                     value={passwordData.currentPassword}
                     onChange={handlePasswordChange}
                     className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent transition-all duration-200"
-                    placeholder="Enter your current password"
+                    placeholder="Enter current password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    {showCurrentPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showCurrentPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
               </div>
@@ -229,19 +267,19 @@ const UserProfile = ({ isOpen, onClose }) => {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
-                    type={showNewPassword ? 'text' : 'password'}
+                    type={showNewPassword ? "text" : "password"}
                     name="newPassword"
                     value={passwordData.newPassword}
                     onChange={handlePasswordChange}
                     className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent transition-all duration-200"
-                    placeholder="Enter your new password"
+                    placeholder="Enter new password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowNewPassword(!showNewPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showNewPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
               </div>
@@ -253,19 +291,19 @@ const UserProfile = ({ isOpen, onClose }) => {
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
                   <input
-                    type={showConfirmPassword ? 'text' : 'password'}
+                    type={showConfirmPassword ? "text" : "password"}
                     name="confirmPassword"
                     value={passwordData.confirmPassword}
                     onChange={handlePasswordChange}
                     className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-[#00ACB5] focus:border-transparent transition-all duration-200"
-                    placeholder="Confirm your new password"
+                    placeholder="Confirm new password"
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                     className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
               </div>
@@ -282,8 +320,97 @@ const UserProfile = ({ isOpen, onClose }) => {
               </div>
             </form>
           )}
+
+          {/* Danger Zone Tab */}
+          {activeTab === 'danger' && (
+            <div className="space-y-6">
+              <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+                <div className="flex items-start space-x-3">
+                  <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="text-lg font-medium text-red-900 mb-2">Delete Account</h3>
+                    <p className="text-red-700 mb-4">
+                      ⚠️ <strong>Warning:</strong> This action is irreversible! Deleting your account will permanently remove:
+                    </p>
+                    <ul className="text-red-700 text-sm space-y-1 mb-4 ml-4">
+                      <li>• Your user profile and settings</li>
+                      <li>• All your conversations and chat history</li>
+                      <li>• All messages and interactions</li>
+                      <li>• Any saved preferences or data</li>
+                    </ul>
+                    <p className="text-red-700 text-sm mb-4">
+                      Once deleted, this data cannot be recovered. Please make sure you have backed up any important information.
+                    </p>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-red-900 mb-2">
+                          Type "DELETE" to confirm account deletion:
+                        </label>
+                        <input
+                          type="text"
+                          value={deleteConfirmation}
+                          onChange={(e) => setDeleteConfirmation(e.target.value)}
+                          className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          placeholder="Type DELETE to confirm"
+                        />
+                      </div>
+
+                      <button
+                        onClick={() => setShowDeleteModal(true)}
+                        disabled={deleteConfirmation !== 'DELETE' || loading}
+                        className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-6 py-3 rounded-xl transition-all duration-200 font-medium"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        <span>Delete My Account</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
+                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Final Confirmation</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone</p>
+                </div>
+              </div>
+
+              <p className="text-gray-700 mb-6">
+                Are you absolutely sure you want to delete your account? This will permanently remove all your data.
+              </p>
+
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={loading}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white rounded-lg transition-colors"
+                >
+                  {loading ? 'Deleting...' : 'Delete Permanently'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

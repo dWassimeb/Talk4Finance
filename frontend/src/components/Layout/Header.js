@@ -1,9 +1,9 @@
-// frontend/src/components/Layout/Header.jsx
+// frontend/src/components/Layout/Header.js
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, Bot, LogOut, User, Settings, ChevronDown } from 'lucide-react';
+import { Menu, Bot, LogOut, User, Settings, ChevronDown, Shield } from 'lucide-react';
 
-const Header = ({ onMenuClick, user, onProfileClick }) => {
+const Header = ({ onMenuClick, user, onProfileClick, onAdminClick }) => {
   const { logout } = useAuth();
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const profileMenuRef = useRef(null);
@@ -25,6 +25,11 @@ const Header = ({ onMenuClick, user, onProfileClick }) => {
   const handleProfileClick = () => {
     setIsProfileMenuOpen(false);
     onProfileClick();
+  };
+
+  const handleAdminClick = () => {
+    setIsProfileMenuOpen(false);
+    onAdminClick();
   };
 
   return (
@@ -57,10 +62,21 @@ const Header = ({ onMenuClick, user, onProfileClick }) => {
             className="flex items-center space-x-3 px-4 py-2 rounded-xl hover:bg-gray-100/80 transition-all duration-200 group"
           >
             <div className="w-8 h-8 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-lg flex items-center justify-center">
-              <User className="w-4 h-4 text-white" />
+              {user?.role === 'admin' ? (
+                <Shield className="w-4 h-4 text-white" />
+              ) : (
+                <User className="w-4 h-4 text-white" />
+              )}
             </div>
             <div className="text-left hidden sm:block">
-              <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+              <div className="flex items-center space-x-2">
+                <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+                {user?.role === 'admin' && (
+                  <span className="inline-flex px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
+                    Admin
+                  </span>
+                )}
+              </div>
               <p className="text-xs text-gray-500">{user?.email}</p>
             </div>
             <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${
@@ -72,7 +88,14 @@ const Header = ({ onMenuClick, user, onProfileClick }) => {
           {isProfileMenuOpen && (
             <div className="absolute right-0 mt-2 w-64 bg-white/95 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/50 py-2 z-50">
               <div className="px-4 py-3 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+                <div className="flex items-center space-x-2 mb-1">
+                  <p className="text-sm font-medium text-gray-900">{user?.username}</p>
+                  {user?.role === 'admin' && (
+                    <span className="inline-flex px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
+                      Admin
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500">{user?.email}</p>
               </div>
 
@@ -83,6 +106,20 @@ const Header = ({ onMenuClick, user, onProfileClick }) => {
                 <Settings className="w-4 h-4 text-gray-500" />
                 <span className="text-sm text-gray-700">Profile Settings</span>
               </button>
+
+              {/* Admin Dashboard Button - Only show for admins */}
+              {user?.role === 'admin' && (
+                <>
+                  <hr className="my-1 border-gray-100" />
+                  <button
+                    onClick={handleAdminClick}
+                    className="w-full flex items-center space-x-3 px-4 py-3 text-left hover:bg-purple-50/80 transition-colors duration-200 text-purple-600"
+                  >
+                    <Shield className="w-4 h-4" />
+                    <span className="text-sm">Admin Dashboard</span>
+                  </button>
+                </>
+              )}
 
               <hr className="my-1 border-gray-100" />
 

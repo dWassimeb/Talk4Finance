@@ -1,6 +1,6 @@
 # backend/app/chat/services.py
 """
-Chat service for handling PowerBI agent interactions
+Chat service for handling PowerBI agent interactions - FIXED VERSION
 """
 import asyncio
 from typing import Optional
@@ -35,24 +35,42 @@ class ChatService:
 
             print(f"   - User ID (converted): {user_id_int}")
 
+            # Verify user exists
+            user = db.query(User).filter(User.id == user_id_int).first()
+            if not user:
+                raise Exception(f"User with ID {user_id_int} not found")
+
             # Get or create conversation
+            conversation = None
             if conversation_id:
+                # Try to find existing conversation
                 conversation = db.query(Conversation).filter(
                     Conversation.id == conversation_id,
-                    Conversation.user_id == user_id_int  # Use converted int
+                    Conversation.user_id == user_id_int
                 ).first()
-            else:
+
+                if not conversation:
+                    print(f"⚠️  Conversation {conversation_id} not found for user {user_id_int}")
+                    # Create new conversation instead of failing
+                    conversation = Conversation(
+                        user_id=user_id_int,
+                        title=message[:50] + "..." if len(message) > 50 else message
+                    )
+                    db.add(conversation)
+                    db.commit()
+                    db.refresh(conversation)
+                    print(f"✅ Created new conversation {conversation.id} for user {user_id_int}")
+
+            if not conversation:
                 # Create new conversation
                 conversation = Conversation(
-                    user_id=user_id_int,  # Use converted int
+                    user_id=user_id_int,
                     title=message[:50] + "..." if len(message) > 50 else message
                 )
                 db.add(conversation)
                 db.commit()
                 db.refresh(conversation)
-
-            if not conversation:
-                raise Exception("Conversation not found")
+                print(f"✅ Created new conversation {conversation.id} for user {user_id_int}")
 
             # Save user message
             user_message = Message(
@@ -62,12 +80,14 @@ class ChatService:
             )
             db.add(user_message)
             db.commit()
+            db.refresh(user_message)
+            print(f"✅ Saved user message {user_message.id}")
 
             # Get response from PowerBI agent
             try:
                 print(f"🤖 Calling PowerBI agent with message: '{message}'")
                 agent_response = await self.powerbi_agent.process_query(message)
-                print(f"✅ PowerBI agent response received")
+                print(f"✅ PowerBI agent response received: {agent_response[:100]}...")
             except Exception as e:
                 print(f"❌ PowerBI agent error: {str(e)}")
                 agent_response = f"I'm sorry, I encountered an error processing your request: {str(e)}"
@@ -80,6 +100,8 @@ class ChatService:
             )
             db.add(agent_message)
             db.commit()
+            db.refresh(agent_message)
+            print(f"✅ Saved agent message {agent_message.id}")
 
             return {
                 "conversation_id": conversation.id,
@@ -99,6 +121,21 @@ class ChatService:
 
         except Exception as e:
             print(f"❌ Error in process_message: {str(e)}")
-            raise e
+            # Return a more user-friendly error response instead of raising
+            return {
+                "conversation_id": conversation_id,
+                "user_message": {
+                    "id": None,
+                    "content": message,
+                    "is_user": True,
+                    "created_at": None
+                },
+                "agent_message": {
+                    "id": None,
+                    "content": f"I'm sorry, I encountered an error: {str(e)}",
+                    "is_user": False,
+                    "created_at": None
+                }
+            }
         finally:
             db.close()

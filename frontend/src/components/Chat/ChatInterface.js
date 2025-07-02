@@ -1,4 +1,4 @@
-// frontend/src/components/Chat/ChatInterface.jsx
+// frontend/src/components/Chat/ChatInterface.js
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useChat } from '../../hooks/useChat';
@@ -8,11 +8,13 @@ import ChatInput from './ChatInput';
 import Header from '../Layout/Header';
 import Sidebar from '../Layout/Sidebar';
 import UserProfile from '../User/UserProfile';
+import AdminDashboard from '../Admin/AdminDashboard';
 import { Sparkles, TrendingUp, BarChart3, DollarSign } from 'lucide-react';
 
 const ChatInterface = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [adminDashboardOpen, setAdminDashboardOpen] = useState(false);
   const { user } = useAuth();
   const { currentConversation, messages, isTyping, sendMessage, createNewConversation } = useChat();
 
@@ -26,6 +28,10 @@ const ChatInterface = () => {
 
   const handleProfileClick = () => {
     setProfileOpen(true);
+  };
+
+  const handleAdminClick = () => {
+    setAdminDashboardOpen(true);
   };
 
   // Suggested prompts for empty state
@@ -68,14 +74,15 @@ const ChatInterface = () => {
           onMenuClick={() => setSidebarOpen(!sidebarOpen)}
           user={user}
           onProfileClick={handleProfileClick}
+          onAdminClick={handleAdminClick}
         />
 
         {/* Chat Messages */}
         <div className="flex-1 overflow-y-auto">
           {messages.length === 0 ? (
-            // Empty State
+            // Empty State - Original Design
             <div className="flex items-center justify-center h-full p-8">
-              <div className="text-center max-w-2xl">
+              <div className="text-center max-w-3xl">
                 <div className="w-16 h-16 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-2xl flex items-center justify-center mx-auto mb-6">
                   <Sparkles className="w-8 h-8 text-white" />
                 </div>
@@ -86,7 +93,7 @@ const ChatInterface = () => {
                   Your AI-powered financial agent. Ask me anything about Docaposte financial data and performance metrics.
                 </p>
 
-                {/* Suggested Prompts */}
+                {/* Suggested Prompts - Original Style */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
                   {suggestedPrompts.map((prompt, index) => (
                     <button
@@ -113,7 +120,7 @@ const ChatInterface = () => {
               </div>
             </div>
           ) : (
-            // Messages
+            // Messages - Original Style
             <div className="p-6 space-y-6 max-w-4xl mx-auto w-full">
               {messages.map((message) => (
                 <ChatMessage
@@ -133,17 +140,24 @@ const ChatInterface = () => {
           )}
         </div>
 
-        {/* Chat Input */}
+        {/* Chat Input - Original Style */}
         <div className="border-t border-gray-200/50 bg-white/80 backdrop-blur-xl">
           <ChatInput onSendMessage={handleSendMessage} disabled={isTyping} />
         </div>
       </div>
 
-      {/* User Profile Modal */}
+      {/* Modals */}
       <UserProfile
         isOpen={profileOpen}
         onClose={() => setProfileOpen(false)}
       />
+
+      {user?.role === 'admin' && (
+        <AdminDashboard
+          isOpen={adminDashboardOpen}
+          onClose={() => setAdminDashboardOpen(false)}
+        />
+      )}
     </div>
   );
 };

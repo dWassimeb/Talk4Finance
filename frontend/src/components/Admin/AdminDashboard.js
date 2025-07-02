@@ -78,9 +78,28 @@ const AdminDashboard = ({ isOpen, onClose }) => {
       setSelectedUser(null);
       setRejectionReason('');
     } catch (error) {
+      console.error('Error in handleUserAction:', error);
+      let errorMessage = `Failed to ${action} user`;
+
+      // Handle different types of errors
+      if (error.response) {
+        // Backend error response
+        if (error.response.data) {
+          if (typeof error.response.data === 'string') {
+            errorMessage = error.response.data;
+          } else if (error.response.data.detail) {
+            errorMessage = error.response.data.detail;
+          } else if (error.response.data.message) {
+            errorMessage = error.response.data.message;
+          }
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
       setMessage({
         type: 'error',
-        text: error.response?.data?.detail || `Failed to ${action} user`
+        text: errorMessage
       });
     } finally {
       setLoading(false);
@@ -276,9 +295,7 @@ const AdminDashboard = ({ isOpen, onClose }) => {
                             <div className="flex items-center space-x-3">
                               <div className="w-10 h-10 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-lg flex items-center justify-center">
                                 {userItem.role === 'admin' ?
-                                  <div className="w-5 h-5 bg-gradient-to-br from-amber-500 to-yellow-600 rounded flex items-center justify-center">
-                                    <Crown className="w-3 h-3 text-white" />
-                                  </div> :
+                                  <Crown className="w-5 h-5 text-white" /> :
                                   <Users className="w-5 h-5 text-white" />
                                 }
                               </div>
@@ -298,7 +315,7 @@ const AdminDashboard = ({ isOpen, onClose }) => {
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              userItem.role === 'admin' ? 'bg-gradient-to-r from-amber-100 to-yellow-100 text-amber-800 border border-amber-200' : 'bg-blue-100 text-blue-800'
+                              userItem.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
                             }`}>
                               {userItem.role}
                             </span>
@@ -337,12 +354,10 @@ const AdminDashboard = ({ isOpen, onClose }) => {
                                   </button>
                                   <button
                                     onClick={() => handlePromoteToAdmin(userItem.id)}
-                                    className="p-2 text-amber-600 hover:bg-gradient-to-r hover:from-amber-50 hover:to-yellow-50 rounded-lg transition-all duration-200"
+                                    className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
                                     title="Promote to Admin"
                                   >
-                                    <div className="w-4 h-4 bg-gradient-to-br from-amber-500 to-yellow-600 rounded flex items-center justify-center">
-                                      <Crown className="w-2.5 h-2.5 text-white" />
-                                    </div>
+                                    <Crown className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => openActionModal(userItem, 'delete')}

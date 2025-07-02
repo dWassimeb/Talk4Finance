@@ -1,7 +1,7 @@
 // frontend/src/components/Layout/Header.js
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, Bot, LogOut, User, Settings, ChevronDown, Shield } from 'lucide-react';
+import { Menu, Bot, LogOut, User, Settings, ChevronDown, Shield, Crown } from 'lucide-react';
 
 const Header = ({ onMenuClick, user, onProfileClick, onAdminClick }) => {
   const { logout } = useAuth();
@@ -63,7 +63,7 @@ const Header = ({ onMenuClick, user, onProfileClick, onAdminClick }) => {
           >
             <div className="w-8 h-8 bg-gradient-to-br from-[#00ACB5] to-[#00929A] rounded-lg flex items-center justify-center">
               {user?.role === 'admin' ? (
-                <Shield className="w-4 h-4 text-white" />
+                <Crown className="w-4 h-4 text-white" />
               ) : (
                 <User className="w-4 h-4 text-white" />
               )}
@@ -115,7 +115,7 @@ const Header = ({ onMenuClick, user, onProfileClick, onAdminClick }) => {
                     onClick={handleAdminClick}
                     className="w-full flex items-center space-x-3 px-4 py-3 text-left hover:bg-purple-50/80 transition-colors duration-200 text-purple-600"
                   >
-                    <Shield className="w-4 h-4" />
+                    <Crown className="w-4 h-4" />
                     <span className="text-sm">Admin Dashboard</span>
                   </button>
                 </>

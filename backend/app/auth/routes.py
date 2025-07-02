@@ -339,14 +339,14 @@ from pydantic import BaseModel
 class UserRoleUpdate(BaseModel):
     new_role: str
 
-@auth_router.put("/admin/user/{user_id}/role")
-async def update_user_role(
+@auth_router.put("/admin/user/{user_id}/status")
+async def update_user_status(
         user_id: int,
-        role_update: UserRoleUpdate,
+        request: dict,  # Changed from expecting a body parameter
         current_admin: User = Depends(get_current_admin_user),
         db: Session = Depends(get_db)
 ):
-    """Update user role (admin only)"""
+    """Update user status (admin only)"""
 
     user = db.query(User).filter(User.id == user_id).first()
 
@@ -356,40 +356,38 @@ async def update_user_role(
             detail="User not found"
         )
 
-    # Don't allow changing your own role
-    if user.id == current_admin.id:
+    # Get the new status from the request
+    new_status = request.get("new_status")
+
+    if not new_status:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot change your own role"
-        )
-
-    new_role = role_update.new_role
-
-    if new_role not in ["admin", "user"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid role value. Must be 'admin' or 'user'"
+            detail="new_status is required"
         )
 
     try:
-        user.role = UserRole(new_role)
+        user.status = UserStatus(new_status)
+        if new_status == UserStatus.APPROVED:
+            user.is_active = True
+        elif new_status in [UserStatus.REJECTED, UserStatus.SUSPENDED]:
+            user.is_active = False
+
         db.commit()
         db.refresh(user)
 
-        logger.info(f"User role updated: {user.email} -> {new_role} by admin: {current_admin.email}")
+        logger.info(f"User status updated: {user.email} -> {new_status} by admin: {current_admin.email}")
 
         return {
-            "message": f"User role updated to {new_role}",
+            "message": f"User status updated to {new_status}",
             "user_id": user.id,
-            "new_role": new_role
+            "new_status": new_status
         }
 
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid role value. Must be 'admin' or 'user'"
+            detail="Invalid status value"
         )
-
 
     @auth_router.delete("/admin/user/{user_id}")
     async def delete_user_by_admin(

@@ -1,11 +1,11 @@
-// frontend/src/components/Auth/Login.js
+// frontend/src/components/Auth/Login.js - Fixed with minimal changes
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import {
   Bot, Lock, Mail, Sparkles, TrendingUp, BarChart3,
   DollarSign, Shield, Eye, EyeOff, AlertCircle, LogIn,
-  Zap, Target, Brain, Rocket
+  Zap, Target, Brain, Rocket, Info
 } from 'lucide-react';
 
 const Login = () => {
@@ -13,26 +13,148 @@ const Login = () => {
     email: '',
     password: ''
   });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Use the auth context for proper login
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const redirectPath = location.state?.from?.pathname || '/chat';
+
+  const getErrorMessage = (error) => {
+    // Handle both error objects (from API) and error strings (from AuthContext)
+    let detail = '';
+
+    if (typeof error === 'string') {
+      detail = error;
+    } else if (error.response?.data?.detail) {
+      detail = error.response.data.detail;
+    } else if (error.message) {
+      detail = error.message;
+    }
+
+    // Handle specific error cases with user-friendly messages
+    if (detail.includes('pending administrator approval')) {
+      return {
+        type: 'pending',
+        title: 'Account Pending Approval',
+        message: 'Your account is still awaiting administrator approval. You will receive an email notification once your account is reviewed.',
+        action: 'Please wait for approval notification'
+      };
+    }
+
+    if (detail.includes('not approved') || detail.includes('rejected')) {
+      return {
+        type: 'rejected',
+        title: 'Account Not Approved',
+        message: 'Your account registration was not approved. Please contact the administrator for more information.',
+        action: 'Contact administrator'
+      };
+    }
+
+    if (detail.includes('suspended')) {
+      return {
+        type: 'suspended',
+        title: 'Account Suspended',
+        message: 'Your account has been suspended. Please contact the administrator to resolve this issue.',
+        action: 'Contact administrator'
+      };
+    }
+
+    if (detail.includes('inactive')) {
+      return {
+        type: 'inactive',
+        title: 'Account Inactive',
+        message: 'Your account is currently inactive. Please contact the administrator for assistance.',
+        action: 'Contact administrator'
+      };
+    }
+
+    if (detail.includes('Incorrect email or password')) {
+      return {
+        type: 'credentials',
+        title: 'Login Failed',
+        message: 'The email address or password you entered is incorrect. Please try again.',
+        action: 'Check your credentials'
+      };
+    }
+
+    // Default error message
+    return {
+      type: 'error',
+      title: 'Login Error',
+      message: detail || 'Unable to connect to the server. Please check your internet connection and try again.',
+      action: 'Please try again'
+    };
+  };
+
+  const getErrorStyles = (errorType) => {
+    switch (errorType) {
+      case 'pending':
+        return {
+          bgColor: 'bg-yellow-50/80',
+          borderColor: 'border-yellow-200/50',
+          textColor: 'text-yellow-800',
+          iconColor: 'text-yellow-600'
+        };
+      case 'rejected':
+      case 'suspended':
+        return {
+          bgColor: 'bg-red-50/80',
+          borderColor: 'border-red-200/50',
+          textColor: 'text-red-800',
+          iconColor: 'text-red-600'
+        };
+      case 'inactive':
+        return {
+          bgColor: 'bg-gray-50/80',
+          borderColor: 'border-gray-200/50',
+          textColor: 'text-gray-800',
+          iconColor: 'text-gray-600'
+        };
+      default:
+        return {
+          bgColor: 'bg-red-50/80',
+          borderColor: 'border-red-200/50',
+          textColor: 'text-red-800',
+          iconColor: 'text-red-600'
+        };
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError(null);
 
-    const result = await login(formData.email, formData.password);
+    try {
+      console.log('🔐 Attempting login via AuthContext...');
 
-    if (result.success) {
-      navigate('/chat');
-    } else {
-      setError(result.error || 'Login failed. Please try again.');
+      // FIXED: Use AuthContext login instead of direct API call
+      const result = await login(formData.email, formData.password);
+
+      console.log('🔐 Login result:', result);
+
+      if (result.success) {
+        console.log('✅ Login successful, redirecting to:', redirectPath);
+        // Navigate will work now because user is set in AuthContext
+        navigate(redirectPath, { replace: true });
+      } else {
+        console.log('❌ Login failed:', result.error);
+        const errorInfo = getErrorMessage(result.error);
+        setError(errorInfo);
+      }
+
+    } catch (err) {
+      console.error('❌ Login error:', err);
+      const errorInfo = getErrorMessage(err);
+      setError(errorInfo);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleChange = (e) => {
@@ -40,6 +162,8 @@ const Login = () => {
       ...formData,
       [e.target.name]: e.target.value
     });
+    // Clear error when user starts typing
+    if (error) setError(null);
   };
 
   return (
@@ -172,9 +296,21 @@ const Login = () => {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {error && (
-                    <div className="bg-red-50/80 backdrop-blur-sm border border-red-200/50 text-red-700 px-4 py-3 rounded-xl flex items-start space-x-2">
-                      <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                      <span className="text-sm">{error}</span>
+                    <div className={`${getErrorStyles(error.type).bgColor} ${getErrorStyles(error.type).borderColor} backdrop-blur-sm rounded-xl p-4`}>
+                      <div className="flex items-start space-x-3">
+                        {error.type === 'pending' ? (
+                          <Info className={`w-5 h-5 ${getErrorStyles(error.type).iconColor} mt-0.5 flex-shrink-0`} />
+                        ) : (
+                          <AlertCircle className={`w-5 h-5 ${getErrorStyles(error.type).iconColor} mt-0.5 flex-shrink-0`} />
+                        )}
+                        <div className={`text-sm ${getErrorStyles(error.type).textColor}`}>
+                          <p className="font-medium">{error.title}</p>
+                          <p className="text-xs mt-1">{error.message}</p>
+                          {error.action && (
+                            <p className="text-xs mt-2 font-medium">• {error.action}</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
 
@@ -271,6 +407,18 @@ const Login = () => {
                     </Link>
                   </p>
                 </div>
+
+                {/* Admin contact info for rejected/suspended users */}
+                {error && (error.type === 'rejected' || error.type === 'suspended' || error.type === 'inactive') && (
+                  <div className="mt-4 p-3 bg-gray-50/80 backdrop-blur-sm rounded-xl">
+                    <p className="text-xs text-gray-600 text-center">
+                      Need help? Contact administrator:
+                      <a href="mailto:mohamed-ouassime.el-yamani@docaposte.fr" className="text-[#00ACB5] hover:text-[#00929A] ml-1">
+                        mohamed-ouassime.el-yamani@docaposte.fr
+                      </a>
+                    </p>
+                  </div>
+                )}
 
                 {/* Additional Help */}
                 <div className="mt-6 pt-6 border-t border-gray-200/50">

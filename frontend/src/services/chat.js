@@ -1,4 +1,4 @@
-// frontend/src/services/chat.js
+// frontend/src/services/chat.js - COMPLETE VERSION
 import api from './api';
 
 export const chatService = {
@@ -8,7 +8,9 @@ export const chatService = {
   },
 
   async createConversation(title = 'New Conversation') {
-    const response = await api.post('/api/chat/conversations', { title });
+    const response = await api.post('/api/chat/conversations', {
+      title: title
+    });
     return response.data;
   },
 
@@ -22,11 +24,11 @@ export const chatService = {
     return response.data;
   },
 
+  // ADD THIS MISSING METHOD
   async updateConversationTitle(conversationId, title) {
     const response = await api.put(`/api/chat/conversations/${conversationId}/title`, {
       title: title
     });
     return response.data;
-  },
-  
+  }
 };

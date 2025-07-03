@@ -2,8 +2,9 @@
 """
 Chat routes
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import func
 from typing import List
 from app.database.connection import get_db
 from app.database.models import User, Conversation, Message
@@ -75,9 +76,7 @@ async def delete_conversation(
 
     return {"message": "Conversation deleted successfully"}
 
-
-# Add this to your backend/app/chat/routes.py file
-
+# ADD THIS NEW ENDPOINT
 @chat_router.put("/conversations/{conversation_id}/title")
 async def update_conversation_title(
         conversation_id: int,

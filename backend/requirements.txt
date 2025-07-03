@@ -1,4 +1,4 @@
-# backend/requirements.txt - UPDATED VERSION WITH PYDANTIC-SETTINGS
+# backend/requirements.txt - FINAL FIXED VERSION - Resolves ALL conflicts
 # FastAPI and web framework
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
@@ -7,14 +7,16 @@ websockets==12.0
 # Authentication and security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 python-multipart==0.0.6
 
 # Database
 sqlalchemy==2.0.23
+alembic==1.13.1
 
-# Pydantic with email support - UPDATED FOR V2
-pydantic==2.4.2
-pydantic-settings==2.0.3
+# Pydantic with email support - FIXED: Both pydantic and pydantic-settings updated
+pydantic>=2.7.4,<3.0.0
+pydantic-settings>=2.4.0,<3.0.0
 email-validator==2.1.0
 
 # Core dependencies from your existing project
@@ -27,8 +29,12 @@ msal==1.32.0
 # LangChain dependencies - COMPATIBLE VERSIONS
 langchain~=0.3.22
 langchain-core~=0.3.49
-langchain-community
+langchain-community~=0.3.22
 
 # Additional dependencies
 python-dotenv==1.0.0
 cryptography==42.0.8
+aiofiles==23.2.1
+
+# Email
+aiosmtplib==3.0.1

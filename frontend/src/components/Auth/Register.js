@@ -1,11 +1,13 @@
-// frontend/src/components/Auth/Register.jsx
+// frontend/src/components/Auth/Register.jsx - Enhanced with better messaging
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import {
   Bot, Lock, Mail, User, Sparkles, TrendingUp, BarChart3,
-  DollarSign, Shield, CheckCircle, AlertCircle, Eye, EyeOff
+  DollarSign, Shield, CheckCircle, AlertCircle, Eye, EyeOff,
+  Clock, UserCheck, ArrowRight, RotateCcw
 } from 'lucide-react';
+import { authService } from '../../services/auth';
 
 const Register = () => {
   const [formData, setFormData] = useState({
@@ -18,13 +20,13 @@ const Register = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [passwordChecks, setPasswordChecks] = useState({
     length: false,
     uppercase: false,
     lowercase: false,
     number: false
   });
-  const { register } = useAuth();
   const navigate = useNavigate();
 
   const validatePassword = (password) => {
@@ -46,6 +48,7 @@ const Register = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    setRegistrationSuccess(false);
 
     // Validation
     if (!validateEmail(formData.email)) {
@@ -66,17 +69,39 @@ const Register = () => {
       return;
     }
 
-    const result = await register(formData.email, formData.username, formData.password);
+    try {
+      // Call the API directly instead of using auth context
+      const response = await authService.register(
+        formData.email,
+        formData.username,
+        formData.password
+      );
 
-    if (result.success) {
-      // Show success message before redirect
+      // Registration successful - show success state
+      setRegistrationSuccess(true);
       setError('');
-      setTimeout(() => navigate('/login'), 2000);
-    } else {
-      setError(result.error);
-    }
 
-    setLoading(false);
+      // REMOVED: Automatic redirect - now it stays on success page
+
+    } catch (err) {
+      console.error('Registration error:', err);
+
+      // Extract error message from response
+      let errorMessage = 'Registration failed. Please try again.';
+
+      if (err.response?.data?.detail) {
+        errorMessage = err.response.data.detail;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
+      setRegistrationSuccess(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleChange = (e) => {
@@ -89,7 +114,100 @@ const Register = () => {
     if (name === 'password') {
       validatePassword(value);
     }
+
+    // Clear error when user starts typing
+    if (error) setError('');
   };
+
+  // ENHANCED: Success state with manual navigation buttons
+  if (registrationSuccess) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#F8FFFE] via-[#E6F7F8] to-[#D4F4F7] flex items-center justify-center px-4 py-8">
+        <div className="max-w-md w-full">
+          <div className="bg-white/90 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/30 p-8 text-center">
+            <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <UserCheck className="w-8 h-8 text-white" />
+            </div>
+
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Registration Successful!</h2>
+
+            <div className="bg-blue-50/80 backdrop-blur-sm border border-blue-200/50 text-blue-700 px-6 py-4 rounded-xl mb-6">
+              <div className="flex items-start space-x-3">
+                <Clock className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                <div className="text-left">
+                  <p className="font-semibold mb-2">Account Under Review</p>
+                  <p className="text-sm text-blue-600">
+                    Your account has been created and is awaiting administrator approval.
+                    You'll receive an email notification once your account is activated.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm text-gray-600 mb-8">
+              <p>✅ Account created successfully</p>
+              <p>📧 Admin notification sent</p>
+              <p>⏳ Approval pending</p>
+            </div>
+
+            {/* ADDED: Manual navigation buttons */}
+            <div className="space-y-3">
+              <button
+                onClick={() => navigate('/login', {
+                  state: {
+                    message: 'Registration successful! Please wait for admin approval before signing in.',
+                    type: 'info'
+                  }
+                })}
+                className="w-full bg-gradient-to-r from-[#00ACB5] to-[#00929A] hover:from-[#00929A] hover:to-[#007A80] text-white font-semibold py-3 px-6 rounded-2xl transition-all duration-200 transform hover:scale-[1.02] flex items-center justify-center group"
+              >
+                <span>Go to Sign In</span>
+                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              </button>
+
+              <button
+                onClick={() => {
+                  setRegistrationSuccess(false);
+                  setFormData({
+                    email: '',
+                    username: '',
+                    password: '',
+                    confirmPassword: ''
+                  });
+                  setPasswordChecks({
+                    length: false,
+                    uppercase: false,
+                    lowercase: false,
+                    number: false
+                  });
+                }}
+                className="w-full text-gray-600 hover:text-gray-800 font-medium py-2 transition-colors flex items-center justify-center group"
+              >
+                <RotateCcw className="w-4 h-4 mr-2 group-hover:rotate-180 transition-transform duration-300" />
+                Register Another Account
+              </button>
+            </div>
+
+            {/* ADDED: Additional help text */}
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <p className="text-xs text-gray-500 mb-2">
+                Need help with your registration?
+              </p>
+              <p className="text-xs text-gray-400">
+                Contact administrator:
+                <a
+                  href="mailto:mohamed-ouassime.el-yamani@docaposte.fr"
+                  className="text-[#00ACB5] hover:text-[#00929A] ml-1 underline"
+                >
+                  mohamed-ouassime.el-yamani@docaposte.fr
+                </a>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#F8FFFE] via-[#E6F7F8] to-[#D4F4F7] flex items-center justify-center px-4 py-8 relative overflow-hidden">
@@ -335,13 +453,13 @@ const Register = () => {
                     )}
                   </button>
 
-                  {/* Admin Approval Notice */}
+                  {/* Info Notice */}
                   <div className="bg-blue-50/80 backdrop-blur-sm border border-blue-200/50 text-blue-700 px-4 py-3 rounded-xl">
                     <div className="flex items-start space-x-2">
                       <Shield className="w-5 h-5 flex-shrink-0 mt-0.5" />
                       <div className="text-sm">
-                        <p className="font-medium">Admin Approval Required</p>
-                        <p className="text-blue-600">Your account will be reviewed by an administrator before activation. You'll receive an email notification once approved.</p>
+                        <p className="font-medium">Secure Registration Process</p>
+                        <p className="text-blue-600">All accounts require administrator approval for security purposes.</p>
                       </div>
                     </div>
                   </div>

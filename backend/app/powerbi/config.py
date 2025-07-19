@@ -30,9 +30,11 @@ class AppSettings(BaseSettings):
 
     # Known tables in the dataset
     KNOWN_TABLES: List[str] = [
-        "INDICATEURS", "DIM_CLIENT", "DIM_DATE", "DIM_SOCIETE",
-        "GL", "MAPPING_ACTIVITE", "MAPPING_CDR", "MAPPING_COMPTE",
-        "MAPPING_PRODUIT", "MAPPING_PROJET_CDR", "MAPPING_PROJECT_MULTIBU"
+        "PT", "DIM_CLIENT", "DIM_DATE", "DIM_SOCIETE", "DIM_BU",
+        "TRI_POLE", "TRI_METIER", "DIM_MARGE", "TRI_MAPPING_MB_MN_FS",
+        "MAPPING_ACTIVITE", "MAPPING_PRODUIT", "MAPPING_PROJET_MULTIBU",
+        "MAPPING_PROJET_CDR", "MAPPING_COMPTE", "TRI_REGROUPEMENT_PPT",
+        "INDICATEURS"
     ]
 
     class Config:
